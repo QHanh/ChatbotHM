@@ -1,0 +1,36 @@
+from typing import List
+
+def is_asking_for_more(user_query: str) -> bool:
+    """Kiểm tra xem người dùng có muốn xem thêm sản phẩm không."""
+    keywords = [
+        "khác không", "nữa không", "thêm không", "loại nào nữa", "xem thêm"
+    ]
+    return any(kw in user_query.lower() for kw in keywords)
+
+def wants_specifications(user_query: str) -> bool:
+    """
+    Kiểm tra xem câu hỏi của người dùng có chứa từ khóa
+    yêu cầu thông số/chi tiết sản phẩm hay không.
+    """
+    keywords = [
+        "thông số", "chi tiết", "cấu hình", "mô tả",
+        "thông tin", "cụ thể", "rõ hơn", "kỹ hơn"
+    ]
+    return any(kw in user_query.lower() for kw in keywords)
+
+def is_general_query(user_query: str) -> bool:
+    """Kiểm tra xem có phải câu hỏi chung chung về sản phẩm không."""
+    chung_chung = [
+        "shop có những sản phẩm nào", "shop đang kinh doanh gì", "cửa hàng bán những gì"
+    ]
+    return any(kw in user_query.lower() for kw in chung_chung)
+
+def format_history_text(history: List[dict], limit: int = 10) -> str:
+    """Format lịch sử hội thoại thành text."""
+    if not history:
+        return ""
+    
+    history_text = ""
+    for turn in history[-limit:]:
+        history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
+    return history_text

@@ -1,0 +1,13 @@
+pandas
+openpyxl
+elasticsearch      
+
+fastapi
+uvicorn[standard]  
+
+streamlit
+requests
+google-generativeai
+
+# Thư viện cho LM Studio API
+python-dotenv
