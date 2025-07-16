@@ -5,12 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Cấu hình chung
-PAGE_SIZE = 10
+PAGE_SIZE = 8
 
 # API Keys
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 LMSTUDIO_API_URL = os.getenv("LMSTUDIO_API_URL")
 LMSTUDIO_MODEL = os.getenv("LMSTUDIO_MODEL")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # FastAPI Config
 APP_CONFIG = {

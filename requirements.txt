@@ -8,6 +8,7 @@ uvicorn[standard]
 streamlit
 requests
 google-generativeai
+openai
 
 # Thư viện cho LM Studio API
 python-dotenv

@@ -1,9 +1,9 @@
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Literal
 
 class ChatRequest(BaseModel):
     message: str
-    model_choice: str = "gemini"  # Mặc định sử dụng Gemini, tùy chọn khác là "lmstudio"
+    model_choice: Literal["gemini", "lmstudio", "openai"] = "gemini"
 
 class ImageInfo(BaseModel):
     product_name: str

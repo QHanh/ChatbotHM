@@ -7,7 +7,9 @@ from src.services.intent_service import (
     is_product_search_query, 
     llm_wants_specifications, 
     is_asking_for_images,
-    extract_query_from_history
+    extract_query_from_history,
+    resolve_product_for_image,
+    llm_wants_inventory
 )
 from src.services.search_service import search_products
 from src.services.response_service import generate_llm_response
@@ -36,25 +38,28 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         }).copy()
         history = session_data["messages"][-10:].copy()
 
-    # Kiểm tra xem câu hỏi có cần tìm kiếm sản phẩm hay không
+    # Kiểm tra các ý định của người dùng một lần
     needs_product_search = is_product_search_query(user_query, history, model_choice)
-    print(f"Câu hỏi '{user_query}' cần tìm kiếm sản phẩm: {needs_product_search}")
+    wants_images = is_asking_for_images(user_query, history, model_choice)
+    asking_for_more = is_asking_for_more(user_query)
 
-    if is_asking_for_more(user_query) and session_data.get("last_query"):
+    print(f"Câu hỏi '{user_query}' cần tìm kiếm sản phẩm: {needs_product_search}")
+    print(f"Khách hàng có hỏi về ảnh: {wants_images}")
+
+    if asking_for_more and session_data.get("last_query"):
         response_text, retrieved_data = _handle_more_products(
-            user_query, session_data, history, model_choice
+            user_query, session_data, history, model_choice, wants_images
         )
     else:
         response_text, retrieved_data = _handle_new_query(
-            user_query, session_data, history, model_choice, needs_product_search
+            user_query, session_data, history, model_choice, needs_product_search, wants_images
         )
 
     # Cập nhật lịch sử chat
     _update_chat_history(session_id, user_query, response_text, session_data)
 
     # Xử lý ảnh
-    last_query_info = session_data.get("last_query", {})
-    images = _process_images(user_query, history, model_choice, needs_product_search, retrieved_data, last_query_info)
+    images = _process_images(wants_images, needs_product_search, retrieved_data, user_query, history, model_choice)
 
     return ChatResponse(
         reply=response_text,
@@ -63,7 +68,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         has_images=len(images) > 0
     )
 
-def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str):
+def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, wants_images: bool):
     """Xử lý khi người dùng muốn xem thêm sản phẩm."""
     last_query = session_data["last_query"]
     new_offset = session_data["offset"] + PAGE_SIZE
@@ -81,13 +86,13 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     else:
         include_specs = llm_wants_specifications(user_query, history, model_choice)
         response_text = generate_llm_response(
-            user_query, retrieved_data, history, include_specs, model_choice, needs_product_search=True
+            user_query, retrieved_data, history, include_specs, model_choice, needs_product_search=True, wants_images=wants_images
         )
     
     session_data["offset"] = new_offset
     return response_text, retrieved_data
 
-def _handle_new_query(user_query: str, session_data: dict, history: list, model_choice: str, needs_product_search: bool):
+def _handle_new_query(user_query: str, session_data: dict, history: list, model_choice: str, needs_product_search: bool, wants_images: bool):
     """Xử lý câu hỏi mới."""
     retrieved_data = []
     
@@ -103,9 +108,12 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
     else:
         session_data["last_query"] = None
 
-    include_specs = False
     if needs_product_search:
         include_specs = llm_wants_specifications(user_query, history, model_choice)
+        include_inventory = llm_wants_inventory(user_query, history, model_choice)
+    else:
+        include_specs = False
+        include_inventory = False
 
     response_text = generate_llm_response(
         user_query, 
@@ -113,7 +121,9 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         history, 
         include_specs=include_specs, 
         model_choice=model_choice,
-        needs_product_search=needs_product_search
+        needs_product_search=needs_product_search,
+        wants_images=wants_images,
+        include_inventory=include_inventory
     )
     
     return response_text, retrieved_data
@@ -132,138 +142,34 @@ def _update_chat_history(session_id: str, user_query: str, response_text: str, s
         
         chat_history[session_id] = session_data_to_update
 
-def _process_images(user_query: str, history: list, model_choice: str, needs_product_search: bool, retrieved_data: list, last_query_info: dict = None):
+def _process_images(wants_images: bool, needs_product_search: bool, retrieved_data: list, user_query: str, history: list, model_choice: str) -> list[ImageInfo]:
     """Xử lý và trả về danh sách ảnh nếu cần."""
     images = []
-    wants_images = is_asking_for_images(user_query, history, model_choice)
-    print(f"Khách hàng có hỏi về ảnh: {wants_images}")
     
     if wants_images and needs_product_search and retrieved_data:
-        # Ưu tiên sử dụng thông tin từ LLM đã trích xuất
-        if last_query_info and last_query_info.get('product_name'):
-            target_product_name = last_query_info['product_name'].lower()
-            print(f"Tên sản phẩm từ LLM: {target_product_name}")
-            
-            # Lọc sản phẩm dựa trên tên từ LLM
-            filtered_products = _filter_by_llm_extracted_name(retrieved_data, target_product_name)
-        else:
-            # Fallback: Lấy từ khóa sản phẩm từ câu hỏi để lọc chính xác
-            product_keywords = _extract_product_keywords_from_query(user_query)
-            print(f"Từ khóa sản phẩm được trích xuất: {product_keywords}")
-            
-            # Lọc sản phẩm phù hợp nhất
-            filtered_products = _filter_most_relevant_products(retrieved_data, product_keywords)
+        # Sử dụng LLM để xác định (các) sản phẩm cụ thể mà người dùng muốn xem
+        target_product_names = resolve_product_for_image(user_query, history, retrieved_data, model_choice)
         
-        print(f"Số sản phẩm sau khi lọc: {len(filtered_products)}")
-        
-        for item in filtered_products:
-            if item.get('avatar_images'):
-                # Đảm bảo product_link là string
-                product_link = item.get('link_product', '')
+        print(f"LLM đã xác định các sản phẩm để hiển thị ảnh: {target_product_names}")
+
+        # Tạo một map để tra cứu sản phẩm nhanh hơn
+        product_map = {p.get('product_name', ''): p for p in retrieved_data}
+
+        for name in target_product_names:
+            product = product_map.get(name)
+            if product and product.get('avatar_images'):
+                product_link = product.get('link_product', '')
                 if not isinstance(product_link, str):
                     product_link = str(product_link) if product_link else ''
                 
                 images.append(ImageInfo(
-                    product_name=item.get('product_name', ''),
-                    image_url=item.get('avatar_images', ''),
+                    product_name=product.get('product_name', ''),
+                    image_url=product.get('avatar_images', ''),
                     product_link=product_link
                 ))
-    
+
     return images
 
 def health_check():
     """Endpoint kiểm tra trạng thái API."""
     return {"status": "API is running"}
-    
-def _extract_product_keywords_from_query(user_query: str) -> list:
-    """Trích xuất từ khóa sản phẩm từ câu hỏi của người dùng."""
-    # Loại bỏ các từ không cần thiết
-    stop_words = ['có', 'ảnh', 'không', 'cho', 'tôi', 'xem', 'show', 'hình', 'của', 'sản', 'phẩm']
-    
-    # Tách từ và loại bỏ stop words
-    words = user_query.lower().split()
-    keywords = [word for word in words if word not in stop_words and len(word) > 1]
-    
-    return keywords
-
-def _filter_most_relevant_products(products: list, keywords: list) -> list:
-    """Lọc sản phẩm phù hợp nhất dựa trên từ khóa."""
-    if not keywords:
-        # Nếu không có từ khóa, chỉ trả về sản phẩm đầu tiên (có score cao nhất từ Elasticsearch)
-        return products[:1] if products else []
-    
-    scored_products = []
-    
-    for product in products:
-        product_name = product.get('product_name', '').lower()
-        score = 0
-        
-        # Tính điểm dựa trên số từ khóa xuất hiện trong tên sản phẩm
-        for keyword in keywords:
-            if keyword in product_name:
-                score += 1
-        
-        # Thêm điểm bonus nếu tên sản phẩm chứa tất cả từ khóa
-        if all(keyword in product_name for keyword in keywords):
-            score += 2
-        
-        if score > 0:
-            scored_products.append((product, score))
-    
-    # Sắp xếp theo điểm giảm dần
-    scored_products.sort(key=lambda x: x[1], reverse=True)
-    
-    # Trả về tối đa 3 sản phẩm có điểm cao nhất
-    if scored_products:
-        max_score = scored_products[0][1]
-        # Chỉ lấy những sản phẩm có điểm cao nhất
-        best_products = [product for product, score in scored_products if score == max_score]
-        return best_products[:3]  # Tối đa 3 sản phẩm
-    
-    # Nếu không có sản phẩm nào match, trả về sản phẩm đầu tiên
-    return products[:1] if products else []
-
-def _filter_by_llm_extracted_name(products: list, target_product_name: str) -> list:
-    """Lọc sản phẩm dựa trên tên sản phẩm được trích xuất bởi LLM."""
-    if not target_product_name:
-        return products[:1] if products else []
-    
-    # Tách từ khóa từ tên sản phẩm target
-    target_keywords = target_product_name.lower().split()
-    
-    scored_products = []
-    
-    for product in products:
-        product_name = product.get('product_name', '').lower()
-        score = 0
-        
-        # Tính điểm dựa trên số từ khóa xuất hiện trong tên sản phẩm
-        for keyword in target_keywords:
-            if keyword in product_name:
-                score += 1
-        
-        # Bonus điểm nếu tên sản phẩm chứa tất cả từ khóa
-        if all(keyword in product_name for keyword in target_keywords):
-            score += 3
-        
-        # Bonus điểm nếu tên sản phẩm bắt đầu bằng từ khóa đầu tiên
-        if target_keywords and product_name.startswith(target_keywords[0]):
-            score += 2
-        
-        # Bonus điểm nếu tên sản phẩm chứa chính xác chuỗi target
-        if target_product_name in product_name:
-            score += 5
-        
-        scored_products.append((product, score))
-    
-    # Sắp xếp theo điểm giảm dần
-    scored_products.sort(key=lambda x: x[1], reverse=True)
-    
-    # Chỉ lấy sản phẩm có điểm cao nhất
-    if scored_products and scored_products[0][1] > 0:
-        max_score = scored_products[0][1]
-        best_products = [product for product, score in scored_products if score == max_score]
-        return best_products[:2]  # Tối đa 2 sản phẩm có điểm cao nhất
-    
-    # Nếu không có sản phẩm nào match, trả về sản phẩm đầu tiên
-    return products[:1] if products else []

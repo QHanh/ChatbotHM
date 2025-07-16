@@ -1,7 +1,7 @@
 import json
 import re
 from typing import List, Dict, Optional
-from src.services.llm_service import get_gemini_model, get_lmstudio_response
+from src.services.llm_service import get_gemini_model, get_lmstudio_response, get_openai_model
 
 def is_product_search_query(user_query: str, history: list = None, model_choice: str = "gemini") -> bool:
     """
@@ -11,7 +11,7 @@ def is_product_search_query(user_query: str, history: list = None, model_choice:
         model = get_gemini_model()
         if not model:
             return True
-    elif model_choice != "lmstudio":
+    elif model_choice != "lmstudio" and model_choice != "openai":
         return True
 
     history_text = ""
@@ -65,6 +65,25 @@ Câu hỏi này có cần tìm kiếm thông tin sản phẩm không? (CÓ/KHÔN
         except Exception as e:
             print(f"Lỗi khi kiểm tra ý định tìm kiếm bằng LM Studio: {e}")
             return True
+    elif model_choice == "openai":
+        try:
+            openai = get_openai_model()
+            if not openai:
+                return True
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=800
+            )
+            answer = response.choices[0].message.content.strip().upper()
+            print(f"--- KIỂM TRA CẦN TÌM KIẾM SẢN PHẨM (OPENAI) ---")
+            print(f"Câu trả lời của LLM: {answer}")
+            print("------------------------------------------")
+            return "CÓ" in answer
+        except Exception as e:
+            print(f"Lỗi khi kiểm tra ý định tìm kiếm bằng OpenAI: {e}")
+            return True
     return True
 
 def llm_wants_specifications(user_query: str, history: list = None, model_choice: str = "gemini") -> bool:
@@ -75,7 +94,7 @@ def llm_wants_specifications(user_query: str, history: list = None, model_choice
         model = get_gemini_model()
         if not model:
             return False
-    elif model_choice != "lmstudio":
+    elif model_choice != "lmstudio" and model_choice != "openai":
         return False
 
     history_text = ""
@@ -83,7 +102,7 @@ def llm_wants_specifications(user_query: str, history: list = None, model_choice
         for turn in history[-3:]:
             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
-    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông số kỹ thuật, chi tiết, đặc điểm, hay tính năng của một sản phẩm hay không. Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
+    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông số kỹ thuật, chi tiết, đặc điểm, hay tính năng của một sản phẩm hay không hay họ chỉ đang hỏi xem có sản phẩm nào không. Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
 
 Bối cảnh hội thoại gần đây:
 {history_text}
@@ -115,6 +134,25 @@ Khách hàng có hỏi về thông số/chi tiết sản phẩm không? (CÓ/KH�
         except Exception as e:
             print(f"Lỗi khi kiểm tra ý định bằng LM Studio: {e}")
             return False
+    elif model_choice == "openai":
+        try:
+            openai = get_openai_model()
+            if not openai:
+                return False
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=800
+            )
+            answer = response.choices[0].message.content.strip().upper()
+            print(f"--- KIỂM TRA Ý ĐỊNH XEM THÔNG SỐ (OPENAI) ---")
+            print(f"Câu trả lời của LLM: {answer}")
+            print("------------------------------------------")
+            return "CÓ" in answer
+        except Exception as e:
+            print(f"Lỗi khi kiểm tra ý định bằng OpenAI: {e}")
+            return False
     return False
 
 def is_asking_for_images(user_query: str, history: list = None, model_choice: str = "gemini") -> bool:
@@ -125,7 +163,7 @@ def is_asking_for_images(user_query: str, history: list = None, model_choice: st
         model = get_gemini_model()
         if not model:
             return False
-    elif model_choice != "lmstudio":
+    elif model_choice != "lmstudio" and model_choice != "openai":
         return False
 
     history_text = ""
@@ -171,6 +209,25 @@ Khách hàng có hỏi về ảnh sản phẩm không? (CÓ/KHÔNG):"""
             return "CÓ" in answer
         except Exception as e:
             print(f"Lỗi khi kiểm tra ý định xem ảnh bằng LM Studio: {e}")
+            return False
+    elif model_choice == "openai":
+        try:
+            openai = get_openai_model()
+            if not openai:
+                return False
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=800
+            )
+            answer = response.choices[0].message.content.strip().upper()
+            print(f"--- KIỂM TRA Ý ĐỊNH XEM ẢNH (OPENAI) ---")
+            print(f"Câu trả lời của LLM: {answer}")
+            print("------------------------------------------")
+            return "CÓ" in answer
+        except Exception as e:
+            print(f"Lỗi khi kiểm tra ý định xem ảnh bằng OpenAI: {e}")
             return False
     return False
     
@@ -233,5 +290,150 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
             print(f"Lỗi khi parse JSON từ LM Studio (extract_query): {e}")
         except Exception as e:
             print(f"Lỗi khi gọi LM Studio (extract_query): {e}")
+    elif model_choice == "openai":
+        try:
+            openai = get_openai_model()
+            if not openai:
+                return {"product_name": user_query, "category": user_query}
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=800
+            )
+            response_text = response.choices[0].message.content.strip()
+            print("--- RESPONSE để tìm kiếm (OpenAI) ---")
+            print(response_text)
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                cleaned_response = json_match.group(0)
+                data = json.loads(cleaned_response)
+                if 'product_name' in data and 'category' in data:
+                    return data
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"Lỗi khi parse JSON từ OpenAI (extract_query): {e}")
+        except Exception as e:
+            print(f"Lỗi khi gọi OpenAI (extract_query): {e}")
+        return {"product_name": user_query, "category": user_query}
     
     return {"product_name": user_query, "category": user_query}
+
+def resolve_product_for_image(user_query: str, history: list, products: list, model_choice: str = "gemini") -> List[str]:
+    """
+    Sử dụng LLM để xác định (các) sản phẩm cụ thể mà người dùng muốn xem ảnh
+    dựa trên ngữ cảnh và danh sách sản phẩm được cung cấp.
+    """
+    if not products:
+        return []
+
+    # Lấy danh sách tên sản phẩm
+    product_names = [p.get('product_name', '') for p in products if p.get('product_name')]
+    if not product_names:
+        return []
+
+    history_text = ""
+    if history:
+        for turn in history[-3:]:
+            history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
+
+    prompt = (
+        "Bạn là một AI phân tích hội thoại khách hàng. Dưới đây là lịch sử hội thoại gần đây và danh sách các sản phẩm mà cửa hàng có. "
+        "Nhiệm vụ của bạn: xác định khách hàng muốn xem ảnh của sản phẩm nào trong danh sách này. "
+        "Chỉ trả về tên sản phẩm (mỗi tên trên một dòng), không giải thích gì thêm. Nếu không có sản phẩm nào phù hợp, trả về 'NONE'.\n"
+        f"\nBối cảnh hội thoại gần đây:\n{history_text}"
+        f"Câu hỏi của khách hàng: \"{user_query}\"\n"
+        f"\nDanh sách sản phẩm:\n" + "\n".join(f"- {name}" for name in product_names) + "\n"
+        "\nTrả về tên sản phẩm muốn xem ảnh (mỗi tên một dòng, hoặc 'NONE'):"
+    )
+
+    response_text = None
+    try:
+        if model_choice == "gemini":
+            model = get_gemini_model()
+            if not model:
+                return [product_names[0]]
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+        elif model_choice == "lmstudio":
+            response_text = get_lmstudio_response(prompt).strip()
+        elif model_choice == "openai":
+            openai = get_openai_model()
+            if not openai:
+                return [product_names[0]]
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=800
+            )
+            response_text = response.choices[0].message.content.strip()
+        else:
+            return [product_names[0]]
+    except Exception as e:
+        print(f"Lỗi khi gọi LLM (resolve_product_for_image): {e}")
+        return [product_names[0]]
+
+    print(f"--- XÁC ĐỊNH SẢN PHẨM ĐỂ XEM ẢNH (LLM) ---")
+    print(f"Prompt: {prompt}")
+    print(f"LLM Response: {response_text}")
+    print("------------------------------------------")
+
+    if not response_text or response_text.strip().upper() == 'NONE':
+        return []
+
+    # Tách các dòng, loại bỏ dòng trống, chỉ giữ tên sản phẩm có trong danh sách
+    resolved_names = [name.strip() for name in response_text.split('\n') if name.strip() in product_names]
+    # Nếu LLM trả về tên không khớp, fallback sản phẩm đầu tiên
+    if not resolved_names:
+        return [product_names[0]]
+    return resolved_names
+
+def llm_wants_inventory(user_query: str, history: list = None, model_choice: str = "gemini") -> bool:
+    """
+    Sử dụng LLM để xác định xem người dùng có hỏi về tồn kho/số lượng sản phẩm không.
+    """
+    if model_choice == "gemini":
+        model = get_gemini_model()
+        if not model:
+            return False
+    elif model_choice != "lmstudio" and model_choice != "openai":
+        return False
+
+    history_text = ""
+    if history:
+        for turn in history[-3:]:
+            history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
+
+    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về số lượng, tồn kho, hàng còn hay hết của sản phẩm hay không. Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
+
+Bối cảnh hội thoại gần đây:
+{history_text}
+
+Câu hỏi của khách hàng: "{user_query}"
+
+Khách hàng có hỏi về tồn kho/số lượng sản phẩm không? (CÓ/KHÔNG):"""
+
+    try:
+        if model_choice == "gemini":
+            response = get_gemini_model().generate_content(prompt)
+            answer = response.text.strip().upper()
+        elif model_choice == "lmstudio" or model_choice == "openai":
+            if model_choice == "lmstudio":
+                answer = get_lmstudio_response(prompt).strip().upper()
+            else:
+                answer = get_openai_model().chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=800
+                ).choices[0].message.content.strip().upper()
+        else:
+            answer = "KHÔNG"
+        print(f"--- KIỂM TRA Ý ĐỊNH XEM TỒN KHO (LLM) ---")
+        print(f"Prompt: {prompt}")
+        print(f"Câu trả lời của LLM: {answer}")
+        print("------------------------------------------")
+        return "CÓ" in answer
+    except Exception as e:
+        print(f"Lỗi khi kiểm tra ý định tồn kho bằng LLM: {e}")
+        return False

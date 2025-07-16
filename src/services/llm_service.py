@@ -1,6 +1,6 @@
 import os
 import requests
-from src.config.settings import GEMINI_API_KEY, LMSTUDIO_API_URL, LMSTUDIO_MODEL
+from src.config.settings import GEMINI_API_KEY, LMSTUDIO_API_URL, LMSTUDIO_MODEL, OPENAI_API_KEY
 
 def get_gemini_model():
     """Khởi tạo và trả về instance của Gemini Model."""
@@ -38,3 +38,15 @@ def get_lmstudio_response(prompt: str):
     except Exception as e:
         print(f"Lỗi khi gọi LM Studio API: {e}")
         return f"Lỗi kết nối đến LM Studio: {str(e)}"
+
+def get_openai_model():
+    """Khởi tạo và trả về client openai chuẩn >=1.0.0, hoặc None nếu thiếu key."""
+    try:
+        import openai
+        if not OPENAI_API_KEY:
+            return None
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        return client
+    except Exception as e:
+        print(f"Lỗi khi khởi tạo OpenAI client: {e}")
+        return None
