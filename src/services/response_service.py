@@ -125,6 +125,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
         + Nếu giá sản phẩm = 0đ: "Sản phẩm này hiện tại em chưa cập nhật được giá chính xác, nếu anh/chị chốt mua thì báo em để em kiểm tra lại và gửi giá tốt nhất cho mình ạ."
      - Đối với các sản phẩm có nhiều màu hoặc nhiều thuộc tính, tuyệt đối không chủ động liệt kê tất cả thuộc tính ngay từ đầu. Chỉ khi khách hàng hỏi cụ thể về một sản phẩm, bạn mới trình bày rõ các thuộc tính liên quan.
      - Không tự động cung cấp link ảnh sản phẩm. Chỉ đưa ra khi khách hàng yêu cầu rõ ràng.
+     - Bạn cũng nên dựa vào phần lịch sử hội thoại để xác định đúng ý định của khách hàng, nếu thấy chưa hiểu rõ ý khách hàng hãy lịch sự hỏi rõ lại.
 
     {image_instruction}
     {base_instructions}
