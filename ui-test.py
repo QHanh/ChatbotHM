@@ -96,16 +96,25 @@ st.caption("Trợ lý ảo thông minh cho cửa hàng của bạn")
 st.sidebar.title("Cài đặt")
 model_choice = st.sidebar.radio(
     "Chọn mô hình AI:",
-    ["Gemini", "LM Studio"],
+    ["Gemini", "LM Studio", "OpenAI"],
     index=0,
     help="Chọn mô hình AI để xử lý câu hỏi của bạn"
 )
 
 # Cập nhật lựa chọn mô hình
-st.session_state.model_choice = "gemini" if model_choice == "Gemini" else "lmstudio"
+if model_choice == "Gemini":
+    st.session_state.model_choice = "gemini"
+elif model_choice == "LM Studio":
+    st.session_state.model_choice = "lmstudio"
+else:
+    st.session_state.model_choice = "openai"
 
 # Hiển thị thông tin về mô hình đang sử dụng
-model_info = "Gemini" if st.session_state.model_choice == "gemini" else "LM Studio"
+model_info = {
+    "gemini": "Gemini",
+    "lmstudio": "LM Studio",
+    "openai": "OpenAI"
+}[st.session_state.model_choice]
 st.sidebar.info(f"Đang sử dụng: {model_info}")
 
 # Hiển thị trạng thái kết nối
@@ -120,6 +129,19 @@ if st.session_state.model_choice == "lmstudio":
             st.sidebar.error("❌ LM Studio không phản hồi")
     except Exception as e:
         st.sidebar.error(f"❌ Không thể kết nối đến LM Studio: {str(e)}")
+elif st.session_state.model_choice == "openai":
+    try:
+        import openai
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            st.sidebar.error("❌ Thiếu OPENAI_API_KEY trong .env")
+        else:
+            client = openai.OpenAI(api_key=api_key)
+            # Thử gọi models.list để kiểm tra kết nối
+            models = client.models.list()
+            st.sidebar.success("✅ OpenAI API key hợp lệ và kết nối thành công")
+    except Exception as e:
+        st.sidebar.error(f"❌ Không thể kết nối đến OpenAI: {str(e)}")
 
 # --- Chat history ---
 if "messages" not in st.session_state:

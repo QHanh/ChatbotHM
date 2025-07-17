@@ -74,7 +74,7 @@ Câu hỏi này có cần tìm kiếm thông tin sản phẩm không? (CÓ/KHÔN
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=800
+                max_tokens=4000
             )
             answer = response.choices[0].message.content.strip().upper()
             print(f"--- KIỂM TRA CẦN TÌM KIẾM SẢN PHẨM (OPENAI) ---")
@@ -102,7 +102,7 @@ def llm_wants_specifications(user_query: str, history: list = None, model_choice
         for turn in history[-3:]:
             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
-    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông số kỹ thuật, chi tiết, đặc điểm, hay tính năng của một sản phẩm hay không hay họ chỉ đang hỏi xem có sản phẩm nào không. Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
+    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông số kỹ thuật, chi tiết, đặc điểm, hay tính năng của một sản phẩm hay không (chú ý: họ hỏi ảnh thì không phải là hỏi thông số kỹ thuật). Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
 
 Bối cảnh hội thoại gần đây:
 {history_text}
@@ -143,7 +143,7 @@ Khách hàng có hỏi về thông số/chi tiết sản phẩm không? (CÓ/KH�
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=800
+                max_tokens=4000
             )
             answer = response.choices[0].message.content.strip().upper()
             print(f"--- KIỂM TRA Ý ĐỊNH XEM THÔNG SỐ (OPENAI) ---")
@@ -219,7 +219,7 @@ Khách hàng có hỏi về ảnh sản phẩm không? (CÓ/KHÔNG):"""
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=800
+                max_tokens=4000
             )
             answer = response.choices[0].message.content.strip().upper()
             print(f"--- KIỂM TRA Ý ĐỊNH XEM ẢNH (OPENAI) ---")
@@ -299,7 +299,7 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=800
+                max_tokens=4000
             )
             response_text = response.choices[0].message.content.strip()
             print("--- RESPONSE để tìm kiếm (OpenAI) ---")
@@ -364,7 +364,7 @@ def resolve_product_for_image(user_query: str, history: list, products: list, mo
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=800
+                max_tokens=4000
             )
             response_text = response.choices[0].message.content.strip()
         else:
@@ -425,7 +425,7 @@ Khách hàng có hỏi về tồn kho/số lượng sản phẩm không? (CÓ/KH
                     model="gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
-                    max_tokens=800
+                    max_tokens=4000
                 ).choices[0].message.content.strip().upper()
         else:
             answer = "KHÔNG"
