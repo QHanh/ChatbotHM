@@ -9,8 +9,7 @@ def generate_llm_response(
     include_specs: bool = False, 
     model_choice: str = "gemini", 
     needs_product_search: bool = True,
-    wants_images: bool = False,
-    include_inventory: bool = False
+    wants_images: bool = False
 ) -> str:
     """
     Tạo prompt và gọi đến LLM để sinh câu trả lời.
@@ -34,7 +33,7 @@ def generate_llm_response(
         if not search_results:
             return "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
         
-        context += _build_product_context(search_results, include_specs, include_inventory)
+        context += _build_product_context(search_results, include_specs)
 
     # Xây dựng prompt
     prompt = _build_prompt(user_query, context, needs_product_search, wants_images)
@@ -75,7 +74,7 @@ def generate_llm_response(
     # Fallback response
     return _get_fallback_response(search_results, needs_product_search)
 
-def _build_product_context(search_results: List[Dict], include_specs: bool = False, include_inventory: bool = False) -> str:
+def _build_product_context(search_results: List[Dict], include_specs: bool = False) -> str:
     """Xây dựng context thông tin sản phẩm."""
     product_context = "Thông tin sản phẩm tìm thấy:\n"
     for item in search_results:
@@ -87,14 +86,12 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
             f"Chính sách bảo hành: {item.get('guarantee', 'N/A')}, "
         )
         # Chỉ thêm tồn kho nếu include_inventory hoặc tồn kho = 0
-        inventory = item.get('inventory', 0)
-        if include_inventory or inventory == 0:
-            product_context += f"Tồn kho: {inventory}, "
+        product_context += f"Tồn kho: {item.get('inventory', 0)}, "
         if include_specs:
             product_context += f"Mô tả: {item.get('specifications', 'N/A')}, "
         product_context += (
             f"Giá: {item.get('lifecare_price', 0):,.0f}đ, "
-            f"Link đặt hàng: {item.get('link_product', 'N/A')}\n"
+            f"Link sản phẩm: {item.get('link_product', 'N/A')}\n"
             f"Link ảnh: {item.get('avatar_images', 'N/A')}\n"
         )
     return product_context
@@ -110,21 +107,25 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
         image_instruction = 'Lưu ý: Vì hình ảnh sản phẩm sẽ được hiển thị riêng, bạn không cần phải viết link ảnh trong câu trả lời. Thay vào đó, hãy xác nhận rằng bạn đang hiển thị hình ảnh, ví dụ hãy chỉ nói 1 lần duy nhất ở đầu câu trả lời: "Dạ đây là hình ảnh của sản phẩm ạ".'
 
     if needs_product_search:
-        return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile. 
+        return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile có địa chỉ tại Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội (Làm việc từ 8h00 - 18h00), số Hotline: 0982153333.
+    Chỉ nói địa chỉ, thời gian làm việc và số hotline của cửa hàng khi mà khách hàng hỏi về địa chỉ hoặc thời gian làm việc của cửa hàng.
     Hãy sử dụng thông tin được cung cấp dưới đây để trả lời câu hỏi của khách hàng một cách thân thiện, tự nhiên và chính xác. 
-    Không tự bịa thêm thông tin không có trong ngữ cảnh.
+    Tuyệt đối không bịa thêm thông tin ngoài dữ liệu được cung cấp.
     
-    {context}
+    Thông tin sản phẩm: {context}
 
     Câu hỏi của khách hàng: \"{user_query}\"
 
-    Không được nói số lượng tồn kho hay sản phẩm còn bao nhiêu.
-    Chỉ được nói khi mà khách hàng hỏi một sản phẩm còn không hoặc là còn bao nhiêu sản phẩm.
-    Nếu sản phẩm có tồn kho bằng 0 thì hãy nói là "Sản phẩm này bên em hiện đang hết hàng ạ", còn nếu sản phẩm có số lượng tồn kho lớn hơn bằng 1 thì nói là "Sản phẩm này bên em còn hàng ạ".
-    Nếu một sản phẩm được cung cấp có giá là 0đ, hãy nói với khách hàng rằng giá sản phẩm này là "Liên hệ".
-    Các sản phẩm có nhiều màu hay nhiều thuộc tính thì không được chia ra thành nhiều sản phẩm khác nhau, khi nào khách hàng hỏi về duy nhất sản phẩm đó thì mới giới thiệu các thuộc tính của nó.
-    Không tự động cung cấp link đặt hàng hay link ảnh, chỉ đưa ra khi khách hàng yêu cầu một cách cụ thể.
-    
+    Quy tắc trả lời:
+     - Không tiết lộ số lượng tồn kho chính xác của sản phẩm.
+     - Khi khách hàng hỏi về tồn kho:
+        + Nếu tồn kho = 0: "Sản phẩm này bên em hiện đang hết hàng ạ."
+        + Nếu tồn kho ≥ 1: "Sản phẩm này bên em còn hàng ạ."
+     - Khi khách hàng hỏi về giá:
+        + Nếu giá sản phẩm = 0đ: "Sản phẩm này hiện tại em chưa cập nhật được giá chính xác, nếu anh/chị chốt mua thì báo em để em kiểm tra lại và gửi giá tốt nhất cho mình ạ."
+     - Đối với các sản phẩm có nhiều màu hoặc nhiều thuộc tính, tuyệt đối không chủ động liệt kê tất cả thuộc tính ngay từ đầu. Chỉ khi khách hàng hỏi cụ thể về một sản phẩm, bạn mới trình bày rõ các thuộc tính liên quan.
+     - Không tự động cung cấp link ảnh sản phẩm. Chỉ đưa ra khi khách hàng yêu cầu rõ ràng.
+
     {image_instruction}
     {base_instructions}
 
@@ -137,8 +138,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
     Câu trả lời của bạn:"""
     else:
-        return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile.
-    Hãy trả lời câu hỏi của khách hàng một cách thân thiện, tự nhiên và chính xác.
+        return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile có địa chỉ tại Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội (Làm việc từ 8h00 - 18h00), số Hotline: 0982153333.
+    Chỉ nói địa chỉ, thời gian làm việc và số hotline của cửa hàng khi mà khách hàng hỏi về địa chỉ hoặc thời gian làm việc của cửa hàng.
+    Hãy trả lời câu hỏi của khách hàng một cách thân thiện, lễ phép, tự nhiên và chính xác.
     
     {context}
 

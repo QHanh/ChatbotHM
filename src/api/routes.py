@@ -8,8 +8,7 @@ from src.services.intent_service import (
     llm_wants_specifications, 
     is_asking_for_images,
     extract_query_from_history,
-    resolve_product_for_image,
-    llm_wants_inventory
+    resolve_product_for_image
 )
 from src.services.search_service import search_products
 from src.services.response_service import generate_llm_response
@@ -110,10 +109,8 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
 
     if needs_product_search:
         include_specs = llm_wants_specifications(user_query, history, model_choice)
-        include_inventory = llm_wants_inventory(user_query, history, model_choice)
     else:
         include_specs = False
-        include_inventory = False
 
     response_text = generate_llm_response(
         user_query, 
@@ -122,8 +119,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         include_specs=include_specs, 
         model_choice=model_choice,
         needs_product_search=needs_product_search,
-        wants_images=wants_images,
-        include_inventory=include_inventory
+        wants_images=wants_images
     )
     
     return response_text, retrieved_data
@@ -153,7 +149,11 @@ def _process_images(wants_images: bool, needs_product_search: bool, retrieved_da
         print(f"LLM đã xác định các sản phẩm để hiển thị ảnh: {target_product_names}")
 
         # Tạo một map để tra cứu sản phẩm nhanh hơn
-        product_map = {p.get('product_name', ''): p for p in retrieved_data}
+        product_map = {
+            f"{p.get('product_name', '')} ({p.get('properties', '')})": p
+            for p in retrieved_data
+            if p.get('product_name')
+        }
 
         for name in target_product_names:
             product = product_map.get(name)

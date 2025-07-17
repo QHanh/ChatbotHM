@@ -7,7 +7,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 ELASTIC_HOST = "http://localhost:9200"
 INDEX_NAME = "products_news"
-XLSX_FILE_PATH = "dulieu_1507.xlsx"
+XLSX_FILE_PATH = "dulieu_1707.xlsx"
 
 try:
     es_client = Elasticsearch(hosts=[ELASTIC_HOST])

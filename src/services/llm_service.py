@@ -24,7 +24,7 @@ def get_lmstudio_response(prompt: str):
             "messages": [{"role": "user", "content": prompt}],
             "model": LMSTUDIO_MODEL,
             "temperature": 0.7,
-            "max_tokens": 800
+            "max_tokens": 4000
         }
         
         print(f"Gửi yêu cầu đến LM Studio API: {url}")
