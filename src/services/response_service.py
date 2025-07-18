@@ -104,10 +104,11 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
 
 def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None) -> str:
     """Xây dựng prompt cho LLM."""
-    base_instructions = """Bạn nên trả lời lễ phép, tôn trọng người dùng, hãy luôn xưng hô là em và gọi khách hàng là anh/chị.
-    Nếu gặp các câu hỏi không liên quan đến việc sản phẩm hay tư vấn sản phẩm, bạn nên trả lời là em không rõ, anh/chị có thể hỏi lại câu khác giúp em được không ạ.
-    Nếu bạn đã được cung cấp lịch sử hội thoại thì bạn không cần chào lại anh/chị nữa, chỉ cần chào lúc chưa có lịch sử hội thoại."""
-
+    base_instructions = """
+    Bạn hãy trả lời lễ phép, lịch sự, luôn xưng em và gọi khách hàng là anh/chị.
+    Chỉ chào anh/chị khi chưa có lịch sử hội thoại; nếu đã có lịch sử hội thoại trước đó thì em không cần chào lại nữa.
+    Nếu gặp câu hỏi không liên quan đến sản phẩm hoặc tư vấn sản phẩm, em hãy trả lời lịch sự rằng: "Dạ, vấn đề này em không rõ. Anh/chị vui lòng hỏi giúp em câu hỏi khác liên quan đến sản phẩm được không ạ?"
+    """
     image_instruction = ""
     if wants_images:
         image_instruction = (
