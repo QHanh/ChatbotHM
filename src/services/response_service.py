@@ -16,13 +16,14 @@ def generate_llm_response(
     """
     if is_general_query(user_query):
         if not search_results:
-            return "Dạ, cửa hàng em chưa có sản phẩm nào để giới thiệu ạ."
+            return {"answer": "Dạ, cửa hàng em chưa có sản phẩm nào để giới thiệu ạ.", "product_images": []} if wants_images else "Dạ, cửa hàng em chưa có sản phẩm nào để giới thiệu ạ."
         product_names = [item.get('product_name', 'N/A') for item in search_results]
-        return (
+        answer = (
             "Hiện tại cửa hàng em đang kinh doanh nhiều loại sản phẩm về các thiết bị điện tử, ví dụ như: "
             + ".\n".join(product_names) + " và nhiều sản phẩm khác nữa"
             + ".\n\nAnh/chị muốn tìm hiểu thêm về sản phẩm nào không ạ?"
         )
+        return {"answer": answer, "product_images": []} if wants_images else answer
 
     # Chuẩn bị context
     context = ""
@@ -31,48 +32,53 @@ def generate_llm_response(
     
     if needs_product_search:
         if not search_results:
-            return "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
+            return {"answer": "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ.", "product_images": []} if wants_images else "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
         
         context += _build_product_context(search_results, include_specs)
 
-    # Xây dựng prompt
-    prompt = _build_prompt(user_query, context, needs_product_search, wants_images)
+    # Nếu wants_images, truyền danh sách sản phẩm vào prompt
+    product_infos = [
+        f"{p.get('product_name', '')} ({p.get('properties', '')})"
+        for p in search_results if p.get('product_name')
+    ] if wants_images else []
+
+    prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos)
     
     print("--- PROMPT GỬI ĐẾN LLM ---")
     print(prompt)
     print("--------------------------")
 
-    # Gọi LLM
-    if model_choice == "gemini":
-        model = get_gemini_model()
-        if model:
-            try:
+    llm_response = None
+    try:
+        if model_choice == "gemini":
+            model = get_gemini_model()
+            if model:
                 response = model.generate_content(prompt)
-                return response.text.strip()
-            except Exception as e:
-                print(f"Lỗi khi gọi Gemini: {e}")
-    elif model_choice == "lmstudio":
-        try:
-            response = get_lmstudio_response(prompt)
-            return response
-        except Exception as e:
-            print(f"Lỗi khi gọi LM Studio: {e}")
-    elif model_choice == "openai":
-        try:
-            openai = get_openai_model() # Assuming get_openai_response now returns the client
+                llm_response = response.text.strip()
+        elif model_choice == "lmstudio":
+            llm_response = get_lmstudio_response(prompt)
+        elif model_choice == "openai":
+            openai = get_openai_model()
             if not openai:
-                return "Không tìm thấy OpenAI API key."
+                return {"answer": "Không tìm thấy OpenAI API key.", "product_images": []} if wants_images else "Không tìm thấy OpenAI API key."
             response = openai.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=4000
             )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"Lỗi khi gọi OpenAI: {e}")
-    # Fallback response
-    return _get_fallback_response(search_results, needs_product_search)
+            llm_response = response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Lỗi khi gọi LLM: {e}")
+        llm_response = None
+
+    if wants_images:
+        answer, product_images = _parse_answer_and_images(llm_response, product_infos)
+        return {"answer": answer, "product_images": product_images}
+    else:
+        if llm_response:
+            return llm_response
+        return _get_fallback_response(search_results, needs_product_search)
 
 def _build_product_context(search_results: List[Dict], include_specs: bool = False) -> str:
     """Xây dựng context thông tin sản phẩm."""
@@ -96,7 +102,7 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
         )
     return product_context
 
-def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False) -> str:
+def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None) -> str:
     """Xây dựng prompt cho LLM."""
     base_instructions = """Bạn nên trả lời lễ phép, tôn trọng người dùng, hãy luôn xưng hô là em và gọi khách hàng là anh/chị.
     Nếu gặp các câu hỏi không liên quan đến việc sản phẩm hay tư vấn sản phẩm, bạn nên trả lời là em không rõ, anh/chị có thể hỏi lại câu khác giúp em được không ạ.
@@ -104,7 +110,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
     image_instruction = ""
     if wants_images:
-        image_instruction = 'Lưu ý: Vì hình ảnh sản phẩm sẽ được hiển thị riêng, bạn không cần phải viết link ảnh trong câu trả lời. Thay vào đó, hãy xác nhận rằng bạn đang hiển thị hình ảnh, ví dụ hãy chỉ nói 1 lần duy nhất ở đầu câu trả lời: "Dạ đây là hình ảnh của sản phẩm ạ".'
+        image_instruction = (
+            'Lưu ý: Vì hình ảnh sản phẩm sẽ được hiển thị riêng, bạn không cần phải viết link ảnh trong câu trả lời. Thay vào đó, hãy xác nhận rằng bạn đang hiển thị hình ảnh, ví dụ hãy chỉ nói 1 lần duy nhất ở đầu câu trả lời: "Dạ đây là hình ảnh của sản phẩm ạ".'
+            'Sau khi trả lời khách hàng, hãy trả về thêm một mục [PRODUCT_IMAGE] gồm tên sản phẩm khách muốn xem ảnh (mỗi tên một dòng, hoặc NONE nếu không có).\n'
+            'Cấu trúc trả về:\n[ANSWER]\n<phần trả lời khách hàng>\n[PRODUCT_IMAGE]\n<tên sản phẩm muốn show ảnh, mỗi tên một dòng, hoặc NONE>\n'
+            'Chỉ chọn tên sản phẩm trong danh sách sau:\n' + '\n'.join(f'- {info}' for info in (product_infos or []))
+        )
 
     if needs_product_search:
         return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile có địa chỉ tại Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội (Làm việc từ 8h00 - 18h00), số Hotline: 0982153333.
@@ -125,7 +136,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
         + Nếu giá sản phẩm = 0đ: "Sản phẩm này hiện tại em chưa cập nhật được giá chính xác, nếu anh/chị chốt mua thì báo em để em kiểm tra lại và gửi giá tốt nhất cho mình ạ."
      - Đối với các sản phẩm có nhiều màu hoặc nhiều thuộc tính, tuyệt đối không chủ động liệt kê tất cả thuộc tính ngay từ đầu. Chỉ khi khách hàng hỏi cụ thể về một sản phẩm, bạn mới trình bày rõ các thuộc tính liên quan.
      - Không tự động cung cấp link ảnh sản phẩm. Chỉ đưa ra khi khách hàng yêu cầu rõ ràng.
-     - Bạn cũng nên dựa vào phần lịch sử hội thoại để xác định đúng ý định của khách hàng, nếu thấy chưa hiểu rõ ý khách hàng hãy lịch sự hỏi rõ lại.
+     - Bạn cũng nên dựa vào phần lịch sử hội thoại để xác định đúng ý định của khách hàng, nếu thấy chưa hiểu rõ ý khách hàng hãy lịch sự bảo khách hàng có thể hỏi rõ lại.
 
     {image_instruction}
     {base_instructions}
@@ -158,6 +169,29 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Chỉ sử dụng plain text, được phép xuống dòng.
     
     Câu trả lời của bạn:"""
+
+def _parse_answer_and_images(llm_response: str, product_infos: list) -> tuple[str, list]:
+    """
+    Parse kết quả trả về từ LLM dạng:
+    [ANSWER]\n<text>\n[PRODUCT_IMAGE]\n<name1>\n<name2>\n...
+    """
+    if not llm_response:
+        return "", []
+    answer = ""
+    product_images = []
+    parts = llm_response.split("[PRODUCT_IMAGE]")
+    if len(parts) == 2:
+        answer = parts[0].replace("[ANSWER]", "").strip()
+        lines = [l.strip() for l in parts[1].split("\n") if l.strip()]
+        # Chỉ giữ tên sản phẩm hợp lệ
+        product_images = [l for l in lines if l in product_infos and l.upper() != 'NONE']
+        if not product_images and lines and lines[0].upper() != 'NONE':
+            # fallback: nếu LLM trả về tên không khớp, lấy dòng đầu tiên
+            product_images = [lines[0]]
+    else:
+        answer = llm_response.strip()
+    return answer, product_images
+
 
 def _get_fallback_response(search_results: List[Dict], needs_product_search: bool) -> str:
     """Tạo câu trả lời dự phòng khi LLM không hoạt động."""

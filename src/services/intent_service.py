@@ -318,79 +318,79 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
     
     return {"product_name": user_query, "category": user_query}
 
-def resolve_product_for_image(user_query: str, history: list, products: list, model_choice: str = "gemini") -> List[str]:
-    """
-    Sử dụng LLM để xác định (các) sản phẩm cụ thể mà người dùng muốn xem ảnh
-    dựa trên ngữ cảnh và danh sách sản phẩm được cung cấp.
-    """
-    if not products:
-        return []
+# def resolve_product_for_image(user_query: str, history: list, products: list, model_choice: str = "gemini") -> List[str]:
+#     """
+#     Sử dụng LLM để xác định (các) sản phẩm cụ thể mà người dùng muốn xem ảnh
+#     dựa trên ngữ cảnh và danh sách sản phẩm được cung cấp.
+#     """
+#     if not products:
+#         return []
 
-    # Lấy danh sách tên sản phẩm kèm properties
-    product_infos = [
-        f"{p.get('product_name', '')} ({p.get('properties', '')})"
-        for p in products
-        if p.get('product_name')
-    ]
+#     # Lấy danh sách tên sản phẩm kèm properties
+#     product_infos = [
+#         f"{p.get('product_name', '')} ({p.get('properties', '')})"
+#         for p in products
+#         if p.get('product_name')
+#     ]
 
-    if not product_infos:
-        return []
+#     if not product_infos:
+#         return []
 
-    # Xây dựng lịch sử hội thoại gần đây
-    history_text = ""
-    if history:
-        for turn in history[-3:]:
-            history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
+#     # Xây dựng lịch sử hội thoại gần đây
+#     history_text = ""
+#     if history:
+#         for turn in history[-3:]:
+#             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
-    # Tạo prompt đầu ra
-    prompt = (
-        "Bạn là một AI phân tích hội thoại khách hàng. Dưới đây là lịch sử hội thoại gần đây và danh sách các sản phẩm mà cửa hàng có. "
-        "Nhiệm vụ của bạn: xác định khách hàng muốn xem ảnh của sản phẩm nào trong danh sách này. "
-        "Chỉ trả về tên sản phẩm (mỗi tên trên một dòng), không giải thích gì thêm. Nếu không có sản phẩm nào phù hợp, trả về 'NONE'.\n"
-        f"\nBối cảnh hội thoại gần đây:\n{history_text}"
-        f"Câu hỏi của khách hàng: \"{user_query}\"\n"
-        f"\nDanh sách sản phẩm:\n" + "\n".join(f"- {info}" for info in product_infos) + "\n"
-        "\nTrả về tên sản phẩm muốn xem ảnh (mỗi tên một dòng, hoặc 'NONE'):"
-    )
+#     # Tạo prompt đầu ra
+#     prompt = (
+#         "Bạn là một AI phân tích hội thoại khách hàng. Dưới đây là lịch sử hội thoại gần đây và danh sách các sản phẩm mà cửa hàng có. "
+#         "Nhiệm vụ của bạn: xác định khách hàng muốn xem ảnh của sản phẩm nào trong danh sách này. "
+#         "Chỉ trả về tên sản phẩm (mỗi tên trên một dòng), không giải thích gì thêm. Nếu không có sản phẩm nào phù hợp, trả về 'NONE'.\n"
+#         f"\nBối cảnh hội thoại gần đây:\n{history_text}"
+#         f"Câu hỏi của khách hàng: \"{user_query}\"\n"
+#         f"\nDanh sách sản phẩm:\n" + "\n".join(f"- {info}" for info in product_infos) + "\n"
+#         "\nTrả về tên sản phẩm muốn xem ảnh (mỗi tên một dòng, hoặc 'NONE'):"
+#     )
 
-    response_text = None
-    try:
-        if model_choice == "gemini":
-            model = get_gemini_model()
-            if not model:
-                return [product_infos[0]]
-            response = model.generate_content(prompt)
-            response_text = response.text.strip()
-        elif model_choice == "lmstudio":
-            response_text = get_lmstudio_response(prompt).strip()
-        elif model_choice == "openai":
-            openai = get_openai_model()
-            if not openai:
-                return [product_infos[0]]
-            response = openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=4000
-            )
-            response_text = response.choices[0].message.content.strip()
-        else:
-            return [product_infos[0]]
-    except Exception as e:
-        print(f"Lỗi khi gọi LLM (resolve_product_for_image): {e}")
-        return [product_infos[0]]
+#     response_text = None
+#     try:
+#         if model_choice == "gemini":
+#             model = get_gemini_model()
+#             if not model:
+#                 return [product_infos[0]]
+#             response = model.generate_content(prompt)
+#             response_text = response.text.strip()
+#         elif model_choice == "lmstudio":
+#             response_text = get_lmstudio_response(prompt).strip()
+#         elif model_choice == "openai":
+#             openai = get_openai_model()
+#             if not openai:
+#                 return [product_infos[0]]
+#             response = openai.chat.completions.create(
+#                 model="gpt-4o-mini",
+#                 messages=[{"role": "user", "content": prompt}],
+#                 temperature=0.7,
+#                 max_tokens=4000
+#             )
+#             response_text = response.choices[0].message.content.strip()
+#         else:
+#             return [product_infos[0]]
+#     except Exception as e:
+#         print(f"Lỗi khi gọi LLM (resolve_product_for_image): {e}")
+#         return [product_infos[0]]
 
-    print(f"--- XÁC ĐỊNH SẢN PHẨM ĐỂ XEM ẢNH (LLM) ---")
-    print(f"Prompt: {prompt}")
-    print(f"LLM Response: {response_text}")
-    print("------------------------------------------")
+#     print(f"--- XÁC ĐỊNH SẢN PHẨM ĐỂ XEM ẢNH (LLM) ---")
+#     print(f"Prompt: {prompt}")
+#     print(f"LLM Response: {response_text}")
+#     print("------------------------------------------")
 
-    if not response_text or response_text.strip().upper() == 'NONE':
-        return []
+#     if not response_text or response_text.strip().upper() == 'NONE':
+#         return []
 
-    # Tách các dòng, loại bỏ dòng trống, chỉ giữ tên sản phẩm có trong danh sách
-    resolved_names = [name.strip() for name in response_text.split('\n') if name.strip() in product_infos]
-    # Nếu LLM trả về tên không khớp, fallback sản phẩm đầu tiên
-    if not resolved_names:
-        return [product_infos[0]]
-    return resolved_names
+#     # Tách các dòng, loại bỏ dòng trống, chỉ giữ tên sản phẩm có trong danh sách
+#     resolved_names = [name.strip() for name in response_text.split('\n') if name.strip() in product_infos]
+#     # Nếu LLM trả về tên không khớp, fallback sản phẩm đầu tiên
+#     if not resolved_names:
+#         return [product_infos[0]]
+#     return resolved_names

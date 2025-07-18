@@ -7,8 +7,7 @@ from src.services.intent_service import (
     is_product_search_query, 
     llm_wants_specifications, 
     is_asking_for_images,
-    extract_query_from_history,
-    resolve_product_for_image
+    extract_query_from_history
 )
 from src.services.search_service import search_products
 from src.services.response_service import generate_llm_response
@@ -46,11 +45,11 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     print(f"Khách hàng có hỏi về ảnh: {wants_images}")
 
     if asking_for_more and session_data.get("last_query"):
-        response_text, retrieved_data = _handle_more_products(
+        response_text, retrieved_data, product_images = _handle_more_products(
             user_query, session_data, history, model_choice, wants_images
         )
     else:
-        response_text, retrieved_data = _handle_new_query(
+        response_text, retrieved_data, product_images = _handle_new_query(
             user_query, session_data, history, model_choice, needs_product_search, wants_images
         )
 
@@ -58,7 +57,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     _update_chat_history(session_id, user_query, response_text, session_data)
 
     # Xử lý ảnh
-    images = _process_images(wants_images, needs_product_search, retrieved_data, user_query, history, model_choice)
+    images = _process_images(wants_images, needs_product_search, retrieved_data, product_images)
 
     return ChatResponse(
         reply=response_text,
@@ -81,15 +80,21 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     )
 
     if not retrieved_data:
-        response_text = f"Dạ, em đã giới thiệu hết các sản phẩm '{last_query['product_name']}' mà cửa hàng có rồi ạ. Anh/chị có muốn tìm sản phẩm nào khác không?"
+        result = f"Dạ, em đã giới thiệu hết các sản phẩm '{last_query['product_name']}' mà cửa hàng có rồi ạ. Anh/chị có muốn tìm sản phẩm nào khác không?"
     else:
         include_specs = llm_wants_specifications(user_query, history, model_choice)
-        response_text = generate_llm_response(
+        result = generate_llm_response(
             user_query, retrieved_data, history, include_specs, model_choice, needs_product_search=True, wants_images=wants_images
         )
+        if wants_images and isinstance(result, dict):
+            response_text = result["answer"]
+            product_images = result["product_images"]
+        else:
+            response_text = result
+            product_images = []
     
     session_data["offset"] = new_offset
-    return response_text, retrieved_data
+    return response_text, retrieved_data, product_images
 
 def _handle_new_query(user_query: str, session_data: dict, history: list, model_choice: str, needs_product_search: bool, wants_images: bool):
     """Xử lý câu hỏi mới."""
@@ -112,7 +117,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
     else:
         include_specs = False
 
-    response_text = generate_llm_response(
+    result = generate_llm_response(
         user_query, 
         retrieved_data, 
         history, 
@@ -121,8 +126,13 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         needs_product_search=needs_product_search,
         wants_images=wants_images
     )
-    
-    return response_text, retrieved_data
+    if wants_images and isinstance(result, dict):
+        response_text = result["answer"]
+        product_images = result["product_images"]
+    else:
+        response_text = result
+        product_images = []   
+    return response_text, retrieved_data, product_images
     
 def _update_chat_history(session_id: str, user_query: str, response_text: str, session_data: dict):
     """Cập nhật lịch sử chat."""
@@ -138,30 +148,40 @@ def _update_chat_history(session_id: str, user_query: str, response_text: str, s
         
         chat_history[session_id] = session_data_to_update
 
-def _process_images(wants_images: bool, needs_product_search: bool, retrieved_data: list, user_query: str, history: list, model_choice: str) -> list[ImageInfo]:
+def _process_images(wants_images: bool, needs_product_search: bool, retrieved_data: list, product_images: list) -> list[ImageInfo]:
     """Xử lý và trả về danh sách ảnh nếu cần."""
     images = []
-    
-    if wants_images and needs_product_search and retrieved_data:
-        # Sử dụng LLM để xác định (các) sản phẩm cụ thể mà người dùng muốn xem
-        target_product_names = resolve_product_for_image(user_query, history, retrieved_data, model_choice)
-        
-        print(f"LLM đã xác định các sản phẩm để hiển thị ảnh: {target_product_names}")
 
-        # Tạo một map để tra cứu sản phẩm nhanh hơn
-        product_map = {
-            f"{p.get('product_name', '')} ({p.get('properties', '')})": p
-            for p in retrieved_data
-            if p.get('product_name')
-        }
+    def make_key(product):
+        name = str(product.get('product_name', '')).strip()
+        prop = product.get('properties', '')
+        if prop and str(prop).strip() not in ['0', 'None', '', 'null']:
+            return f"{name} ({prop})"
+        return name
 
-        for name in target_product_names:
+    if wants_images and needs_product_search and retrieved_data and product_images:
+        # Chuẩn hóa product_map
+        product_map = {make_key(p): p for p in retrieved_data if p.get('product_name')}
+
+        for name in product_images:
+            # Chuẩn hóa key so sánh
+            name = str(name).strip()
+            if name.endswith(" (0)") or name.endswith(" (None)") or name.endswith(" (null)"):
+                name = name[:name.rfind(" (")].strip()
             product = product_map.get(name)
+            if not product:
+                # Thử lại với key đầy đủ nếu chưa tìm thấy
+                product = product_map.get(name)
+            if not product:
+                # Thử lại với key có properties nếu chưa tìm thấy
+                for k in product_map:
+                    if k.startswith(name):
+                        product = product_map[k]
+                        break
             if product and product.get('avatar_images'):
                 product_link = product.get('link_product', '')
                 if not isinstance(product_link, str):
                     product_link = str(product_link) if product_link else ''
-                
                 images.append(ImageInfo(
                     product_name=product.get('product_name', ''),
                     image_url=product.get('avatar_images', ''),
