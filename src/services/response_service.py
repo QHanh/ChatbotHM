@@ -129,7 +129,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     Câu hỏi của khách hàng: \"{user_query}\"
 
     Quy tắc trả lời:
-     - Không tiết lộ số lượng tồn kho chính xác của sản phẩm.
+     - Không được nói ra số lượng tồn kho chính xác của sản phẩm.
      - Khi khách hàng hỏi về tồn kho:
         + Nếu tồn kho = 0: "Sản phẩm này bên em hiện đang hết hàng ạ."
         + Nếu tồn kho ≥ 1: "Sản phẩm này bên em còn hàng ạ."

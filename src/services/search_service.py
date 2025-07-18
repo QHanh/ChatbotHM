@@ -1,7 +1,7 @@
 from elastic_search_push_data import es_client, INDEX_NAME
 from src.config.settings import PAGE_SIZE
 
-def search_products(product_name: str, category: str = None, offset: int = 0):
+def search_products(product_name: str, category: str = None, properties: str = None, offset: int = 0) -> list:
     """
     Tìm kiếm sản phẩm trong Elasticsearch bằng cách kết hợp truy vấn,
     ưu tiên (boost) các sản phẩm trùng khớp cao hơn.
@@ -18,7 +18,8 @@ def search_products(product_name: str, category: str = None, offset: int = 0):
                         "bool": {
                             "must": [
                                 {"match": {"product_name": product_name}},
-                                {"match": {"category": category}}
+                                {"match": {"category": category}},
+                                {"match": {"properties": properties}}
                             ],
                             "boost": 3
                         }

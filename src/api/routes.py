@@ -76,6 +76,7 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     retrieved_data = search_products(
         product_name=last_query["product_name"],
         category=last_query["category"],
+        properties=last_query["properties"],
         offset=new_offset
     )
 
@@ -105,6 +106,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         retrieved_data = search_products(
             product_name=query_for_es.get("product_name", user_query),
             category=query_for_es.get("category", user_query),
+            properties=query_for_es.get("properties", None),
             offset=0
         )
         session_data["last_query"] = query_for_es

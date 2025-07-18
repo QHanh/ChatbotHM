@@ -22,9 +22,10 @@ def is_product_search_query(user_query: str, history: list = None, model_choice:
     prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông tin sản phẩm cụ thể hay không. 
 
 Câu hỏi cần tìm kiếm sản phẩm là những câu hỏi như:
-- Hỏi về một sản phẩm cụ thể (ví dụ: "shop có bán điện thoại iPhone không?", "có bán laptop Dell không?") 
+- Hỏi về một sản phẩm cụ thể (ví dụ: "shop có bán điện thoại iPhone không?", "có bán laptop Dell không?", "mình muốn mua máy hàn, sản phẩm [tên sản phẩm]") 
 - Hỏi về giá cả, tính năng, thông số kỹ thuật của sản phẩm
 - Hỏi về tồn kho, hàng có sẵn
+- Khách muốn mua sản phẩm có tên loại sản phẩm
 - So sánh các sản phẩm
 
 Câu hỏi KHÔNG cần tìm kiếm sản phẩm là những câu như:
@@ -102,7 +103,7 @@ def llm_wants_specifications(user_query: str, history: list = None, model_choice
         for turn in history[-3:]:
             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
-    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông số kỹ thuật, chi tiết, đặc điểm, hay tính năng của một sản phẩm hay không (chú ý: họ hỏi ảnh thì không phải là hỏi thông số kỹ thuật). Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
+    prompt = f"""Bạn là một AI phân loại ý định. Hãy đọc câu hỏi của khách hàng trong bối cảnh cuộc trò chuyện và quyết định xem họ có đang hỏi về thông số kỹ thuật, chi tiết, đặc điểm, hay tính năng của một sản phẩm hay không (chú ý: họ hỏi ảnh hay họ chỉ muốn biết các tên của các loại sản phẩm thì không phải là hỏi thông số kỹ thuật. Bạn cần phải suy nghĩ xem thông số kỹ thuật có cần thiết cho câu hỏi của họ không). Chỉ trả lời 'CÓ' hoặc 'KHÔNG'.
 
 Bối cảnh hội thoại gần đây:
 {history_text}
@@ -246,17 +247,18 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
         f"Khách: {user_query}\n"
         "\n"
         "Nhiệm vụ của bạn:\n"
-        "- Phân tích ý định của khách hàng và xác định rõ product_name (tên sản phẩm) và category (danh mục sản phẩm) phù hợp nhất để tìm kiếm trong kho hàng.\n"
-        "- Nếu khách hàng hỏi 'shop có đèn kính hiển vi không' thì product_name là 'đèn kính hiển vi', category là 'đèn'.\n"
-        "- Nếu khách hàng hỏi 'shop có kính hiển vi không' thì cả product_name và category đều là 'kính hiển vi'.\n"
+        "- Phân tích ý định của khách hàng và xác định rõ product_name (tên sản phẩm), category (danh mục sản phẩm) và properties (đặc điểm sản phẩm nếu có) phù hợp nhất để tìm kiếm trong kho hàng.\n"
+        "- Ví dụ Nếu khách hàng hỏi 'shop có đèn kính hiển vi không' thì product_name là 'đèn kính hiển vi', category là 'đèn', properties là '' (rỗng).\n"
+        "- Nếu khách hàng hỏi 'shop có kính hiển vi màu xanh không' thì cả product_name và category đều là 'kính hiển vi', properties là 'màu xanh'.\n"
         "- Nếu không xác định được category, hãy để category giống product_name.\n"
-        "- Chỉ trả về kết quả ở dạng JSON với 2 trường: product_name và category. Không giải thích thêm, không thêm bất kỳ ký tự nào ngoài JSON.\n"
+        "- Nếu không xác định được properties, hãy để properties là '' (rỗng).\n"
+        "- Chỉ trả về kết quả ở dạng JSON với 3 trường: product_name, category và properties. Không giải thích thêm, không thêm bất kỳ ký tự nào ngoài JSON.\n"
         "\n"
         "Ví dụ:\n"
         "Khách: shop có đèn kính hiển vi không\n"
-        "Trả về: {\"product_name\": \"đèn kính hiển vi\", \"category\": \"đèn\"}\n"
-        "Khách: shop có kính hiển vi không\n"
-        "Trả về: {\"product_name\": \"kính hiển vi\", \"category\": \"kính hiển vi\"}\n"
+        "Trả về: {\"product_name\": \"đèn kính hiển vi\", \"category\": \"đèn\", \"properties\": \"\"}\n"
+        "Khách: shop có kính hiển vi màu xanh không\n"
+        "Trả về: {\"product_name\": \"kính hiển vi\", \"category\": \"kính hiển vi\", \"properties\": \"màu xanh\"}\n"
     )
     
     if model_choice == "gemini":
@@ -268,7 +270,7 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
                 print(response.text.strip())
                 cleaned_response = response.text.strip().removeprefix("```json").removesuffix("```").strip()
                 data = json.loads(cleaned_response)
-                if 'product_name' in data and 'category' in data:
+                if 'product_name' in data and 'category' in data and 'properties' in data:
                     return data
             except (json.JSONDecodeError, TypeError) as e:
                 print(f"Lỗi khi parse JSON từ Gemini (extract_query): {e}")
@@ -284,7 +286,7 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
             if json_match:
                 cleaned_response = json_match.group(0)
                 data = json.loads(cleaned_response)
-                if 'product_name' in data and 'category' in data:
+                if 'product_name' in data and 'category' in data and 'properties' in data:
                     return data
         except (json.JSONDecodeError, TypeError) as e:
             print(f"Lỗi khi parse JSON từ LM Studio (extract_query): {e}")
@@ -308,15 +310,15 @@ def extract_query_from_history(user_query: str, history: list = None, model_choi
             if json_match:
                 cleaned_response = json_match.group(0)
                 data = json.loads(cleaned_response)
-                if 'product_name' in data and 'category' in data:
+                if 'product_name' in data and 'category' in data and 'properties' in data:
                     return data
         except (json.JSONDecodeError, TypeError) as e:
             print(f"Lỗi khi parse JSON từ OpenAI (extract_query): {e}")
         except Exception as e:
             print(f"Lỗi khi gọi OpenAI (extract_query): {e}")
-        return {"product_name": user_query, "category": user_query}
+        return {"product_name": user_query, "category": user_query, "properties": ""}
     
-    return {"product_name": user_query, "category": user_query}
+    return {"product_name": user_query, "category": user_query, "properties": ""}
 
 # def resolve_product_for_image(user_query: str, history: list, products: list, model_choice: str = "gemini") -> List[str]:
 #     """
