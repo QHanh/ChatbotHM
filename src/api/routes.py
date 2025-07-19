@@ -1,27 +1,22 @@
-from fastapi import HTTPException, Query
-from typing import Dict, Any
+from fastapi import HTTPException
+from typing import Dict, Any, List, Set
 import threading
 
 from src.models.schemas import ChatRequest, ChatResponse, ImageInfo
-from src.services.intent_service import (
-    is_product_search_query, 
-    llm_wants_specifications, 
-    is_asking_for_images,
-    extract_query_from_history
-)
+from src.services.intent_service import analyze_intent_and_extract_entities
 from src.services.search_service import search_products
 from src.services.response_service import generate_llm_response
 from src.utils.helpers import is_asking_for_more
 from src.config.settings import PAGE_SIZE
 
-# Global variables for chat history
 chat_history: Dict[str, Dict[str, Any]] = {}
 chat_history_lock = threading.Lock()
 
+def _get_product_key(product: Dict) -> str:
+    """Tạo một key định danh duy nhất cho sản phẩm."""
+    return f"{product.get('product_name', '')}::{product.get('properties', '')}"
+
 async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> ChatResponse:
-    """
-    Endpoint chính để tương tác với chatbot.
-    """
     user_query = request.message
     model_choice = request.model_choice
     
@@ -32,46 +27,39 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         session_data = chat_history.get(session_id, {
             "messages": [],
             "last_query": None,
-            "offset": 0
+            "offset": 0,
+            "shown_product_keys": set() # GỢI Ý: Thêm set để lưu các sản phẩm đã hiển thị
         }).copy()
         history = session_data["messages"][-10:].copy()
 
-    # Kiểm tra các ý định của người dùng một lần
-    needs_product_search = is_product_search_query(user_query, history, model_choice)
-    wants_images = is_asking_for_images(user_query, history, model_choice)
+    analysis_result = analyze_intent_and_extract_entities(user_query, history, model_choice)
     asking_for_more = is_asking_for_more(user_query)
-
-    print(f"Câu hỏi '{user_query}' cần tìm kiếm sản phẩm: {needs_product_search}")
-    print(f"Khách hàng có hỏi về ảnh: {wants_images}")
 
     if asking_for_more and session_data.get("last_query"):
         response_text, retrieved_data, product_images = _handle_more_products(
-            user_query, session_data, history, model_choice, wants_images
+            user_query, session_data, history, model_choice, analysis_result
         )
     else:
+        # Khi có truy vấn mới, reset lại danh sách đã hiển thị
+        session_data["shown_product_keys"] = set()
         response_text, retrieved_data, product_images = _handle_new_query(
-            user_query, session_data, history, model_choice, needs_product_search, wants_images
+            user_query, session_data, history, model_choice, analysis_result
         )
 
-    # Cập nhật lịch sử chat
     _update_chat_history(session_id, user_query, response_text, session_data)
-
-    # Xử lý ảnh
-    images = _process_images(wants_images, needs_product_search, retrieved_data, product_images)
+    images = _process_images(analysis_result["wants_images"], retrieved_data, product_images)
 
     return ChatResponse(
         reply=response_text,
-        history=chat_history[session_id]["messages"].copy(),
+        history=chat_history.get(session_id, {}).get("messages", []).copy(),
         images=images,
         has_images=len(images) > 0
     )
 
-def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, wants_images: bool):
-    """Xử lý khi người dùng muốn xem thêm sản phẩm."""
+def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
+    """Xử lý khi người dùng muốn xem thêm sản phẩm, có logic chống trùng lặp."""
     last_query = session_data["last_query"]
     new_offset = session_data["offset"] + PAGE_SIZE
-    
-    print(f"Người dùng muốn xem thêm. Tìm lại với query='{last_query}' và offset={new_offset}")
     
     retrieved_data = search_products(
         product_name=last_query["product_name"],
@@ -80,118 +68,90 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         offset=new_offset
     )
 
-    if not retrieved_data:
-        result = f"Dạ, em đã giới thiệu hết các sản phẩm '{last_query['product_name']}' mà cửa hàng có rồi ạ. Anh/chị có muốn tìm sản phẩm nào khác không?"
-    else:
-        include_specs = llm_wants_specifications(user_query, history, model_choice)
-        result = generate_llm_response(
-            user_query, retrieved_data, history, include_specs, model_choice, needs_product_search=True, wants_images=wants_images
-        )
-        if wants_images and isinstance(result, dict):
-            response_text = result["answer"]
-            product_images = result["product_images"]
-        else:
-            response_text = result
-            product_images = []
-    
-    session_data["offset"] = new_offset
-    return response_text, retrieved_data, product_images
+    # GỢI Ý: Lọc ra những sản phẩm đã được hiển thị trước đó
+    shown_keys = session_data["shown_product_keys"]
+    new_products = [p for p in retrieved_data if _get_product_key(p) not in shown_keys]
 
-def _handle_new_query(user_query: str, session_data: dict, history: list, model_choice: str, needs_product_search: bool, wants_images: bool):
-    """Xử lý câu hỏi mới."""
-    retrieved_data = []
-    
-    if needs_product_search:
-        query_for_es = extract_query_from_history(user_query, history, model_choice)
-        retrieved_data = search_products(
-            product_name=query_for_es.get("product_name", user_query),
-            category=query_for_es.get("category", user_query),
-            properties=query_for_es.get("properties", None),
-            offset=0
-        )
-        session_data["last_query"] = query_for_es
-        session_data["offset"] = 0
-    else:
-        session_data["last_query"] = None
+    # GỢI Ý: Nếu sau khi lọc không còn sản phẩm mới, trả lời ngay mà không cần gọi LLM
+    if not new_products:
+        response_text = "Dạ, em đã giới thiệu hết các mẫu tương tự rồi ạ."
+        session_data["offset"] = new_offset
+        return response_text, [], []
 
-    if needs_product_search:
-        include_specs = llm_wants_specifications(user_query, history, model_choice)
-    else:
-        include_specs = False
+    # Cập nhật danh sách các sản phẩm sẽ hiển thị
+    for p in new_products:
+        shown_keys.add(_get_product_key(p))
 
     result = generate_llm_response(
-        user_query, 
-        retrieved_data, 
-        history, 
-        include_specs=include_specs, 
-        model_choice=model_choice,
-        needs_product_search=needs_product_search,
-        wants_images=wants_images
+        user_query, new_products, history, analysis["wants_specs"], model_choice, True, analysis["wants_images"]
     )
-    if wants_images and isinstance(result, dict):
+    
+    product_images = []
+    if analysis["wants_images"] and isinstance(result, dict):
         response_text = result["answer"]
         product_images = result["product_images"]
     else:
         response_text = result
-        product_images = []   
+    
+    session_data["offset"] = new_offset
+    session_data["shown_product_keys"] = shown_keys
+    return response_text, new_products, product_images
+
+def _handle_new_query(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
+    """Xử lý câu hỏi mới."""
+    retrieved_data = []
+    product_images = []
+    
+    if analysis["needs_search"]:
+        search_params = analysis["search_params"]
+        retrieved_data = search_products(
+            product_name=search_params.get("product_name", user_query),
+            category=search_params.get("category", user_query),
+            properties=search_params.get("properties", None),
+            offset=0
+        )
+        session_data["last_query"] = search_params
+        session_data["offset"] = 0
+        # GỢI Ý: Cập nhật danh sách sản phẩm đã hiển thị cho truy vấn mới
+        session_data["shown_product_keys"] = {_get_product_key(p) for p in retrieved_data}
+
+    result = generate_llm_response(
+        user_query, retrieved_data, history, analysis["wants_specs"], model_choice, analysis["needs_search"], analysis["wants_images"]
+    )
+    
+    if analysis["wants_images"] and isinstance(result, dict):
+        response_text = result["answer"]
+        product_images = result["product_images"]
+    else:
+        response_text = result
+        
     return response_text, retrieved_data, product_images
     
 def _update_chat_history(session_id: str, user_query: str, response_text: str, session_data: dict):
-    """Cập nhật lịch sử chat."""
     with chat_history_lock:
-        session_data_to_update = chat_history.get(session_id, {
-            "messages": [],
-            "last_query": session_data["last_query"],
-            "offset": session_data["offset"]
+        current_session = chat_history.get(session_id, {
+            "messages": [], "last_query": None, "offset": 0, "shown_product_keys": set()
         })
-        session_data_to_update["messages"].append({"user": user_query, "bot": response_text})
-        session_data_to_update["last_query"] = session_data["last_query"]
-        session_data_to_update["offset"] = session_data["offset"]
-        
-        chat_history[session_id] = session_data_to_update
+        current_session["messages"].append({"user": user_query, "bot": response_text})
+        current_session["last_query"] = session_data.get("last_query")
+        current_session["offset"] = session_data.get("offset")
+        current_session["shown_product_keys"] = session_data.get("shown_product_keys", set())
+        chat_history[session_id] = current_session
 
-def _process_images(wants_images: bool, needs_product_search: bool, retrieved_data: list, product_images: list) -> list[ImageInfo]:
-    """Xử lý và trả về danh sách ảnh nếu cần."""
+def _process_images(wants_images: bool, retrieved_data: list, product_images_names: list) -> list[ImageInfo]:
     images = []
+    if not wants_images or not retrieved_data or not product_images_names:
+        return images
 
-    def make_key(product):
-        name = str(product.get('product_name', '')).strip()
-        prop = product.get('properties', '')
-        if prop and str(prop).strip() not in ['0', 'None', '', 'null']:
-            return f"{name} ({prop})"
-        return name
-
-    if wants_images and needs_product_search and retrieved_data and product_images:
-        # Chuẩn hóa product_map
-        product_map = {make_key(p): p for p in retrieved_data if p.get('product_name')}
-
-        for name in product_images:
-            # Chuẩn hóa key so sánh
-            name = str(name).strip()
-            if name.endswith(" (0)") or name.endswith(" (None)") or name.endswith(" (null)"):
-                name = name[:name.rfind(" (")].strip()
-            product = product_map.get(name)
-            if not product:
-                # Thử lại với key đầy đủ nếu chưa tìm thấy
-                product = product_map.get(name)
-            if not product:
-                # Thử lại với key có properties nếu chưa tìm thấy
-                for k in product_map:
-                    if k.startswith(name):
-                        product = product_map[k]
-                        break
-            if product and product.get('avatar_images'):
-                product_link = product.get('link_product', '')
-                if not isinstance(product_link, str):
-                    product_link = str(product_link) if product_link else ''
-                images.append(ImageInfo(
-                    product_name=product.get('product_name', ''),
-                    image_url=product.get('avatar_images', ''),
-                    product_link=product_link
-                ))
-
+    product_map = { f"{p.get('product_name', '')} ({p.get('properties', '')})": p for p in retrieved_data if p.get('product_name')}
+    
+    for name in product_images_names:
+        name = name.strip()
+        product_data = product_map.get(name)
+        if product_data and product_data.get('avatar_images'):
+            images.append(ImageInfo(
+                product_name=product_data.get('product_name', ''),
+                image_url=product_data.get('avatar_images', ''),
+                product_link=str(product_data.get('link_product', ''))
+            ))
     return images
-
-def health_check():
-    """Endpoint kiểm tra trạng thái API."""
-    return {"status": "API is running"}

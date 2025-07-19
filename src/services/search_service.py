@@ -1,7 +1,8 @@
 from elastic_search_push_data import es_client, INDEX_NAME
 from src.config.settings import PAGE_SIZE
 
-def search_products(product_name: str, category: str = None, properties: str = None, offset: int = 0) -> list:
+# GỢI Ý: Thêm tham số `require_properties` để linh hoạt hơn trong việc tìm kiếm.
+def search_products(product_name: str, category: str = None, properties: str = None, offset: int = 0, require_properties: bool = False) -> list:
     """
     Tìm kiếm sản phẩm trong Elasticsearch bằng cách kết hợp truy vấn,
     ưu tiên (boost) các sản phẩm trùng khớp cao hơn.
@@ -10,17 +11,28 @@ def search_products(product_name: str, category: str = None, properties: str = N
     if not category:
         category = product_name
 
+    must_clauses = [
+        {"match": {"product_name": product_name}},
+        {"match": {"category": category}},
+    ]
+    should_clauses = []
+
+    if properties:
+        # GỢI Ý: Nếu `require_properties` là True, thuộc tính sẽ là điều kiện bắt buộc.
+        if require_properties:
+            must_clauses.append({"match": {"properties": properties}})
+        else:
+            # Ngược lại, nó chỉ giúp tăng điểm cho kết quả khớp.
+            should_clauses.append({"match": {"properties": {"query": properties, "boost": 0.8}}})
+
     combined_query = {
         "query": {
             "bool": {
                 "should": [
                     {
                         "bool": {
-                            "must": [
-                                {"match": {"product_name": product_name}},
-                                {"match": {"category": category}},
-                                {"match": {"properties": properties}}
-                            ],
+                            "must": must_clauses,
+                            "should": should_clauses,
                             "boost": 3
                         }
                     },

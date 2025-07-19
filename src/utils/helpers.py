@@ -3,7 +3,8 @@ from typing import List
 def is_asking_for_more(user_query: str) -> bool:
     """Kiểm tra xem người dùng có muốn xem thêm sản phẩm không."""
     keywords = [
-        "khác không", "nữa không", "thêm không", "loại nào nữa", "xem thêm"
+        "khác không", "nữa không", "thêm không", "loại nào nữa", "xem thêm", "mẫu nào không", "hết chưa", "còn không", 
+        "mẫu nào khác", "sản phẩm nào khác", "loại khác", "loại nào khác", "nào nữa", "cái khác", "khác ko", "nữa ko", "còn ko", "hết chưa"
     ]
     return any(kw in user_query.lower() for kw in keywords)
 

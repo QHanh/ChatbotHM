@@ -15,6 +15,16 @@ services:
     networks:
       - chatbot_network
 
+  api-service:
+    build: .
+    container_name: api_service
+    ports:
+      - "8118:8118"
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch_service:9200
+    networks:
+      - chatbot_network
+
 networks:
   chatbot_network:
     driver: bridge

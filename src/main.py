@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config.settings import APP_CONFIG, CORS_CONFIG
 from src.models.schemas import ChatRequest
-from src.api.routes import chat_endpoint, health_check
+from src.api.routes import chat_endpoint
 
 # Khởi tạo FastAPI app
 app = FastAPI(**APP_CONFIG)
@@ -20,10 +20,6 @@ async def chat(request: ChatRequest, session_id: str = Query("default", descript
     - **session_id**: ID phiên chat (mặc định là 'default')
     """
     return await chat_endpoint(request, session_id)
-
-@app.get("/", summary="Kiểm tra trạng thái API")
-def read_root():
-    return health_check()
 
 if __name__ == "__main__":
     import uvicorn

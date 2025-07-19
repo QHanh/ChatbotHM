@@ -1,13 +1,14 @@
+import re
 from typing import List, Dict
 from src.services.llm_service import get_gemini_model, get_lmstudio_response, get_openai_model
 from src.utils.helpers import is_general_query, format_history_text
 
 def generate_llm_response(
-    user_query: str, 
-    search_results: list, 
-    history: list = None, 
-    include_specs: bool = False, 
-    model_choice: str = "gemini", 
+    user_query: str,
+    search_results: list,
+    history: list = None,
+    include_specs: bool = False,
+    model_choice: str = "gemini",
     needs_product_search: bool = True,
     wants_images: bool = False
 ) -> str:
@@ -25,35 +26,33 @@ def generate_llm_response(
         )
         return {"answer": answer, "product_images": []} if wants_images else answer
 
-    # Chuẩn bị context
     context = ""
     if history:
         context += f"Lịch sử hội thoại gần đây:\n{format_history_text(history)}\n"
-    
+
     if needs_product_search:
         if not search_results:
             return {"answer": "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ.", "product_images": []} if wants_images else "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
-        
+
         context += _build_product_context(search_results, include_specs)
 
-    # Nếu wants_images, truyền danh sách sản phẩm vào prompt
     product_infos = [
         f"{p.get('product_name', '')} ({p.get('properties', '')})"
         for p in search_results if p.get('product_name')
     ] if wants_images else []
 
     prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos)
-    
-    print("--- PROMPT GỬI ĐẾN LLM ---")
+
+    print("--- PROMPT GỬI ĐẾN LLM (CẬP NHẬT QUY TẮC CHỌN ẢNH) ---")
     print(prompt)
-    print("--------------------------")
+    print("--------------------------------------------------")
 
     llm_response = None
     try:
         if model_choice == "gemini":
             model = get_gemini_model()
             if model:
-                response = model.generate_content(prompt)
+                response = model.generate_content(prompt, safety_settings={'HARM_CATEGORY_HARASSMENT': 'BLOCK_NONE'})
                 llm_response = response.text.strip()
         elif model_choice == "lmstudio":
             llm_response = get_lmstudio_response(prompt)
@@ -64,10 +63,15 @@ def generate_llm_response(
             response = openai.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
+                temperature=0.5,
                 max_tokens=4000
             )
             llm_response = response.choices[0].message.content.strip()
+            usage = response.usage
+            print(f"📊 Prompt: {usage.prompt_tokens}, Completion: {usage.completion_tokens}, Total: {usage.total_tokens}")
+            cost = (usage.prompt_tokens * 0.15 + usage.completion_tokens * 0.6) / 1_000_000
+            print(f"💰 Estimated cost (GPT-4o-mini): ${cost:.6f}")
+
     except Exception as e:
         print(f"Lỗi khi gọi LLM: {e}")
         llm_response = None
@@ -80,129 +84,140 @@ def generate_llm_response(
             return llm_response
         return _get_fallback_response(search_results, needs_product_search)
 
+
 def _build_product_context(search_results: List[Dict], include_specs: bool = False) -> str:
-    """Xây dựng context thông tin sản phẩm."""
-    product_context = "Thông tin sản phẩm tìm thấy:\n"
+    product_context = "Dữ liệu sản phẩm tìm thấy:\n"
     for item in search_results:
-        product_context += (
-            f"Tên: {item.get('product_name', 'N/A')}, "
-            f"Danh mục: {item.get('category', 'N/A')}, "
-            f"Thuộc tính: {item.get('properties', 'N/A')}, "
-            f"Thương hiệu: {item.get('trademark', 'N/A')}, "
-            f"Chính sách bảo hành: {item.get('guarantee', 'N/A')}, "
-        )
-        # Chỉ thêm tồn kho nếu include_inventory hoặc tồn kho = 0
-        product_context += f"Tồn kho: {item.get('inventory', 0)}, "
+        product_context += f"- Tên: {item.get('product_name', 'N/A')}\n"
+        product_context += f"  Thuộc tính: {item.get('properties', 'N/A')}\n"
+        product_context += f"  Giá: {item.get('lifecare_price', 0):,.0f}đ\n"
+        product_context += f"  Tồn kho: {item.get('inventory', 0)}\n"
         if include_specs:
-            product_context += f"Mô tả: {item.get('specifications', 'N/A')}, "
-        product_context += (
-            f"Giá: {item.get('lifecare_price', 0):,.0f}đ, "
-            f"Link sản phẩm: {item.get('link_product', 'N/A')}\n"
-            f"Link ảnh: {item.get('avatar_images', 'N/A')}\n"
-        )
+            product_context += f"  Mô tả: {item.get('specifications', 'N/A')}\n"
     return product_context
 
+
 def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None) -> str:
-    """Xây dựng prompt cho LLM."""
-    base_instructions = """
-    Bạn hãy trả lời lễ phép, lịch sự, luôn xưng em và gọi khách hàng là anh/chị.
-    Chỉ chào anh/chị khi chưa có lịch sử hội thoại; nếu đã có lịch sử hội thoại trước đó thì em không cần chào lại nữa.
-    Nếu gặp câu hỏi không liên quan đến sản phẩm hoặc tư vấn sản phẩm, em hãy trả lời lịch sự rằng: "Dạ, vấn đề này em không rõ. Anh/chị vui lòng hỏi giúp em câu hỏi khác liên quan đến sản phẩm được không ạ?"
-    """
     image_instruction = ""
     if wants_images:
-        image_instruction = (
-            'Lưu ý: Vì hình ảnh sản phẩm sẽ được hiển thị riêng, bạn không cần phải viết link ảnh trong câu trả lời. Thay vào đó, hãy xác nhận rằng bạn đang hiển thị hình ảnh, ví dụ hãy chỉ nói 1 lần duy nhất ở đầu câu trả lời: "Dạ đây là hình ảnh của sản phẩm ạ".'
-            'Sau khi trả lời khách hàng, hãy trả về thêm một mục [PRODUCT_IMAGE] gồm tên sản phẩm khách muốn xem ảnh (mỗi tên một dòng, hoặc NONE nếu không có).\n'
-            'Cấu trúc trả về:\n[ANSWER]\n<phần trả lời khách hàng>\n[PRODUCT_IMAGE]\n<tên sản phẩm muốn show ảnh, mỗi tên một dòng, hoặc NONE>\n'
-            'Chỉ chọn tên sản phẩm trong danh sách sau:\n' + '\n'.join(f'- {info}' for info in (product_infos or []))
-        )
+        product_list_str = '\n'.join(f'- {info}' for info in product_infos or [])
+        # GỢI Ý: Đã thêm một quy tắc mới, nghiêm ngặt hơn về cách chọn ảnh.
+        image_instruction = f"""## HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH ##
+- Khi khách muốn xem ảnh, câu trả lời PHẢI có 2 phần: [ANSWER] và [PRODUCT_IMAGE].
+- Phần [ANSWER]: Bắt đầu bằng "Dạ đây là hình ảnh sản phẩm ạ." và nội dung tư vấn.
+- Phần [PRODUCT_IMAGE]: Liệt kê tên sản phẩm từ danh sách dưới đây. Mỗi tên một dòng.
 
-    if needs_product_search:
-        return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile có địa chỉ tại Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội (Làm việc từ 8h00 - 18h00), số Hotline: 0982153333.
-    Chỉ nói địa chỉ, thời gian làm việc và số hotline của cửa hàng khi mà khách hàng hỏi về địa chỉ hoặc thời gian làm việc của cửa hàng.
-    Hãy sử dụng thông tin được cung cấp dưới đây để trả lời câu hỏi của khách hàng một cách thân thiện, tự nhiên và chính xác. 
-    Tuyệt đối không bịa thêm thông tin ngoài dữ liệu được cung cấp.
-    
-    Thông tin sản phẩm: {context}
+- **QUY TẮC CHỌN ẢNH (RẤT QUAN TRỌNG):** Phải đối chiếu chính xác từng chi tiết trong câu hỏi của khách (bao gồm cả model, thuộc tính) với "Danh sách sản phẩm". Chỉ chọn những dòng khớp **chính xác 100%**. Nếu khách hỏi về "MODEL:8512P", bạn chỉ được phép chọn dòng có chứa "MODEL:8512P". Không được suy diễn hay chọn các model tương tự.
 
-    Câu hỏi của khách hàng: \"{user_query}\"
+- Danh sách sản phẩm có thể dùng cho [PRODUCT_IMAGE]:
+{product_list_str}
+"""
 
-    Quy tắc trả lời:
-     - Không được nói ra số lượng tồn kho chính xác của sản phẩm.
-     - Khi khách hàng hỏi về tồn kho:
-        + Nếu tồn kho = 0: "Sản phẩm này bên em hiện đang hết hàng ạ."
-        + Nếu tồn kho ≥ 1: "Sản phẩm này bên em còn hàng ạ."
-     - Khi khách hàng hỏi về giá:
-        + Nếu giá sản phẩm = 0đ: "Sản phẩm này hiện tại em chưa cập nhật được giá chính xác, nếu anh/chị chốt mua thì báo em để em kiểm tra lại và gửi giá tốt nhất cho mình ạ."
-     - Đối với các sản phẩm có nhiều màu hoặc nhiều thuộc tính, tuyệt đối không chủ động liệt kê tất cả thuộc tính ngay từ đầu. Chỉ khi khách hàng hỏi cụ thể về một sản phẩm, bạn mới trình bày rõ các thuộc tính liên quan.
-     - Không tự động cung cấp link ảnh sản phẩm. Chỉ đưa ra khi khách hàng yêu cầu rõ ràng.
-     - Bạn cũng nên dựa vào phần lịch sử hội thoại để xác định đúng ý định của khách hàng, nếu thấy chưa hiểu rõ ý khách hàng hãy lịch sự bảo khách hàng có thể hỏi rõ lại.
+    if not needs_product_search:
+        return f"""## BỐI CẢNH ##
+- Bạn là "Mai", một nhân viên tư vấn thân thiện và chuyên nghiệp của cửa hàng "Hoàng Mai Mobile".
+- Địa chỉ: Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội.
+- Giờ làm việc: 8h00 - 18h00.
+- Hotline: 0982153333.
+- Lịch sử trò chuyện:
+{context}
+## NHIỆM VỤ ##
+- Trả lời câu hỏi của khách hàng: "{user_query}"
+- Luôn xưng "em" và gọi khách là "anh/chị".
+- CHỈ cung cấp thông tin cửa hàng (địa chỉ, giờ làm việc, hotline) khi khách hỏi trực tiếp.
+- Nếu không biết, hãy nói: "Dạ, vấn đề này em không rõ. Anh/chị vui lòng hỏi giúp em câu khác liên quan đến sản phẩm được không ạ?"
+## QUY TẮC ĐỊNH DẠNG ##
+- KHÔNG dùng Markdown (*, #, _). Chỉ dùng text thuần.
+## CÂU TRẢ LỜI CỦA BẠN: ##
+"""
 
-    {image_instruction}
-    {base_instructions}
+    return f"""## BỐI CẢNH ##
+- Bạn là "Mai", một nhân viên tư vấn chuyên nghiệp của cửa hàng "Hoàng Mai Mobile".
+- Dưới đây là lịch sử trò chuyện và dữ liệu về các sản phẩm liên quan đến câu hỏi của khách.
 
-    Lưu ý quan trọng:
-    - KHÔNG được sử dụng bất kỳ định dạng Markdown hoặc HTML nào.
-    - KHÔNG dùng các ký tự như `*`, `**`, `_`, `#`...
-    - KHÔNG in đậm, in nghiêng, hay làm nổi bật văn bản.
-    - Các tên sản phẩm nên dùng dấu gạch ngang "-" ở đầu mỗi tên sản phẩm.
-    - Chỉ sử dụng plain text, được phép xuống dòng.
+## NHIỆM VỤ ##
+- Phân tích **toàn bộ lịch sử trò chuyện** và **câu hỏi mới nhất** của khách hàng để hiểu đúng ý định.
+- Trả lời câu hỏi của khách hàng: "{user_query}"
+- TUYỆT ĐỐI chỉ sử dụng thông tin trong phần "DỮ LIỆU CUNG CẤP" dưới đây.
 
-    Câu trả lời của bạn:"""
-    else:
-        return f"""Bạn là một nhân viên tư vấn sản phẩm bán hàng cho cửa hàng thiết bị/phụ kiện điện tử tên là Hoàng Mai Mobile có địa chỉ tại Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội (Làm việc từ 8h00 - 18h00), số Hotline: 0982153333.
-    Chỉ nói địa chỉ, thời gian làm việc và số hotline của cửa hàng khi mà khách hàng hỏi về địa chỉ hoặc thời gian làm việc của cửa hàng.
-    Hãy trả lời câu hỏi của khách hàng một cách thân thiện, lễ phép, tự nhiên và chính xác.
-    
-    {context}
+## DỮ LIỆU CUNG CẤP ##
+{context}
 
-    Câu hỏi của khách hàng: \"{user_query}\"
+{image_instruction}
 
-    {base_instructions}
+## QUY TẮC BẮT BUỘC ##
+- **Xử lý câu hỏi chung về danh mục:**
+    - Nếu câu hỏi của khách hàng chỉ là để xác nhận sự tồn tại của một loại sản phẩm chung (ví dụ: "shop có bán máy hàn không?"), **KHÔNG liệt kê tất cả sản phẩm ra ngay**.
+    - Thay vào đó, hãy xác nhận là có bán và hỏi lại để làm rõ nhu cầu của khách.
+    - **VÍ DỤ:**
+        - Khách hỏi: "bên shop có bán máy hàn không ạ"
+        - Trả lời đúng: "Dạ bên em có bán nhiều loại máy hàn ạ. Không biết anh/chị đang cần tìm loại máy hàn nào ạ?"
 
-    Nếu khách hàng hỏi về sản phẩm cụ thể mà bạn không có thông tin, hãy hỏi họ cung cấp thêm chi tiết về sản phẩm họ đang tìm kiếm.
-    
-    Lưu ý quan trọng:
-    - KHÔNG được sử dụng bất kỳ định dạng Markdown hoặc HTML nào.
-    - KHÔNG dùng các ký tự như `*`, `**`, `_`, `#`...
-    - KHÔNG in đậm, in nghiêng, hay làm nổi bật văn bản.
-    - Chỉ sử dụng plain text, được phép xuống dòng.
-    
-    Câu trả lời của bạn:"""
+- **Phân tích ngữ cảnh:**
+    - **BẮT BUỘC** phải xem lại "Lịch sử hội thoại gần đây" để hiểu đúng ý của khách.
+    - **VÍ DỤ:** Nếu khách vừa hỏi về "máy hàn", sau đó hỏi "còn loại nào không", bạn phải hiểu là khách muốn xem các loại **máy hàn khác**.
+
+- **Xem thêm / Loại khác:**
+    - Khi khách hỏi xem thêm, hãy giới thiệu các sản phẩm có trong "DỮ LIỆU CUNG CẤP".
+
+- **Tồn kho:**
+    - Áp dụng khi khách hỏi về **tình trạng có sẵn** của một sản phẩm cụ thể (ví dụ: "máy hàn A còn hàng không?").
+    - Trả lời "Dạ sản phẩm này bên em còn hàng ạ" (nếu tồn kho > 0) hoặc "Dạ sản phẩm này bên em hiện đang hết hàng ạ" (nếu tồn kho = 0).
+    - KHÔNG tự động nói về tồn kho và KHÔNG nói số lượng cụ thể.
+
+- **Giá sản phẩm:**
+    - Nếu một sản phẩm có giá lớn hơn 0, bạn có thể chủ động nói giá khi giới thiệu.
+    - **Nếu một sản phẩm có giá là 0đ, TUYỆT ĐỐI KHÔNG tự động nói ra giá.**
+    - **CHỈ KHI** khách hàng hỏi cụ thể về giá của sản phẩm có giá 0đ, hãy trả lời: "Dạ sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo cho anh/chị giá chính xác sản phẩm này ạ."
+
+- **Xưng hô và Định dạng:**
+    - Luôn xưng "em", gọi khách là "anh/chị".
+    - KHÔNG dùng Markdown (*, #, _), không in đậm, in nghiêng. Chỉ dùng text thuần.
+    - Khi liệt kê sản phẩm, dùng dấu gạch ngang "-" ở đầu dòng.
+
+## CÂU TRẢ LỜI CỦA BẠN: ##
+"""
 
 def _parse_answer_and_images(llm_response: str, product_infos: list) -> tuple[str, list]:
-    """
-    Parse kết quả trả về từ LLM dạng:
-    [ANSWER]\n<text>\n[PRODUCT_IMAGE]\n<name1>\n<name2>\n...
-    """
     if not llm_response:
-        return "", []
+        return "Dạ em xin lỗi, có lỗi xảy ra trong quá trình tạo câu trả lời.", []
+
     answer = ""
     product_images = []
-    parts = llm_response.split("[PRODUCT_IMAGE]")
+    parts = re.split(r'\[PRODUCT_IMAGE\]', llm_response, flags=re.IGNORECASE)
+
+    def clean_name(name: str) -> str:
+        return re.sub(r"^[-\s*•+]+", "", name.strip())
+
     if len(parts) == 2:
-        answer = parts[0].replace("[ANSWER]", "").strip()
-        lines = [l.strip() for l in parts[1].split("\n") if l.strip()]
-        # Chỉ giữ tên sản phẩm hợp lệ
-        product_images = [l for l in lines if l in product_infos and l.upper() != 'NONE']
-        if not product_images and lines and lines[0].upper() != 'NONE':
-            # fallback: nếu LLM trả về tên không khớp, lấy dòng đầu tiên
-            product_images = [lines[0]]
+        answer = re.sub(r'\[ANSWER\]', '', parts[0], flags=re.IGNORECASE).strip()
+        image_lines = [clean_name(l) for l in re.split(r'[\n,]+', parts[1]) if l.strip()]
+        valid_product_names = set(product_infos)
+        product_images = [line for line in image_lines if line in valid_product_names and line.upper() != 'NONE']
+
+        if not product_images and image_lines:
+             for line in image_lines:
+                 for valid_name in valid_product_names:
+                     if line in valid_name:
+                         product_images.append(valid_name)
+                         break
     else:
         answer = llm_response.strip()
+
+    if not answer and product_images:
+        answer = "Dạ đây là hình ảnh sản phẩm em gửi anh/chị tham khảo ạ."
+
     return answer, product_images
 
 
 def _get_fallback_response(search_results: List[Dict], needs_product_search: bool) -> str:
-    """Tạo câu trả lời dự phòng khi LLM không hoạt động."""
     if needs_product_search:
         if not search_results:
             return "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
         first = search_results[0]
         return (
             f"Dạ, sản phẩm {first.get('product_name', 'N/A')} "
-            f"giá {first.get('lifecare_price', 0):,.0f}đ, tồn kho {first.get('inventory', 0)}. "
+            f"hiện đang có giá {first.get('lifecare_price', 0):,.0f}đ. "
             f"Anh/chị cần tư vấn thêm không ạ?"
         )
     else:

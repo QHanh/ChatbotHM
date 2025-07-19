@@ -7,7 +7,7 @@ import random
 load_dotenv()
 
 # Cấu hình chung
-PAGE_SIZE = 5
+PAGE_SIZE = 8
 
 # API Keys
 api_keys = json.loads(os.getenv("GEMINI_API_KEY"))
