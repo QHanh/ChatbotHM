@@ -1,6 +1,15 @@
+# Thư mục môi trường ảo
 venv/
+
+# File môi trường
 .env
-dulieu_1707.xlsx
-dulieu_1007.xlsx
-dulieu_1407.xlsx
-dulieu_1507.xlsx
+
+# File dữ liệu Excel
+dulieu_*.xlsx
+
+# Cache của Python
+__pycache__/
+**/__pycache__/
+
+# VSCode workspace settings
+.vscode/

@@ -1,4 +1,5 @@
 import re
+from collections import defaultdict
 from typing import List, Dict
 from src.services.llm_service import get_gemini_model, get_lmstudio_response, get_openai_model
 from src.utils.helpers import is_general_query, format_history_text
@@ -43,9 +44,9 @@ def generate_llm_response(
 
     prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos)
 
-    print("--- PROMPT GỬI ĐẾN LLM (CẬP NHẬT QUY TẮC CHỌN ẢNH) ---")
+    print("--- PROMPT GỬI ĐẾN LLM ---")
     print(prompt)
-    print("--------------------------------------------------")
+    print("--------------------------")
 
     llm_response = None
     try:
@@ -86,99 +87,149 @@ def generate_llm_response(
 
 
 def _build_product_context(search_results: List[Dict], include_specs: bool = False) -> str:
-    product_context = "Dữ liệu sản phẩm tìm thấy:\n"
+    """
+    Xây dựng context thông tin sản phẩm, nhóm các sản phẩm cùng tên lại với nhau.
+    """
+    product_groups = defaultdict(list)
+    # Bước 1: Nhóm các sản phẩm theo tên chính
     for item in search_results:
-        product_context += f"- Tên: {item.get('product_name', 'N/A')}\n"
-        product_context += f"  Thuộc tính: {item.get('properties', 'N/A')}\n"
-        product_context += f"  Giá: {item.get('lifecare_price', 0):,.0f}đ\n"
-        product_context += f"  Tồn kho: {item.get('inventory', 0)}\n"
+        product_groups[item.get('product_name', 'N/A')].append(item)
+
+    product_context = "Dữ liệu sản phẩm tìm thấy:\n"
+    # Bước 2: Tạo chuỗi context từ dữ liệu đã được nhóm
+    for name, items in product_groups.items():
+        first_item = items[0]
+        product_context += f"- Tên: {name}\n"
+        
+        # Nếu có nhiều hơn 1 item trong nhóm, nghĩa là có nhiều phiên bản/màu sắc
+        if len(items) > 1:
+            properties_list = [
+                str(item.get('properties', '')) 
+                for item in items 
+                if item.get('properties') and str(item.get('properties')).strip() != '0'
+            ]
+            unique_properties = sorted(list(set(properties_list)))
+            if unique_properties:
+                product_context += f"  Lưu ý: Sản phẩm này có các phiên bản/màu sắc: {', '.join(unique_properties)}\n"
+        else:
+            # Nếu chỉ có 1, hiển thị thuộc tính của nó
+            prop = first_item.get('properties')
+            if prop and str(prop).strip() != '0':
+                product_context += f"  Thuộc tính: {prop}\n"
+
+        # Lấy thông tin chung từ sản phẩm đầu tiên trong nhóm
+        price = first_item.get('lifecare_price', 0)
+        if price > 0:
+            product_context += f"  Giá: {price:,.0f}đ\n"
+        else:
+            product_context += "  Giá: 0đ\n"
+
+        product_context += f"  Tồn kho: {first_item.get('inventory', 0)}\n"
+
         if include_specs:
-            product_context += f"  Mô tả: {item.get('specifications', 'N/A')}\n"
+            product_context += f"  Mô tả: {first_item.get('specifications', 'N/A')}\n"
     return product_context
 
 
 def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None) -> str:
+    """
+    Xây dựng prompt cho LLM với các quy tắc hội thoại nâng cao.
+    """
     image_instruction = ""
     if wants_images:
         product_list_str = '\n'.join(f'- {info}' for info in product_infos or [])
-        # GỢI Ý: Đã thêm một quy tắc mới, nghiêm ngặt hơn về cách chọn ảnh.
         image_instruction = f"""## HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH ##
 - Khi khách muốn xem ảnh, câu trả lời PHẢI có 2 phần: [ANSWER] và [PRODUCT_IMAGE].
 - Phần [ANSWER]: Bắt đầu bằng "Dạ đây là hình ảnh sản phẩm ạ." và nội dung tư vấn.
-- Phần [PRODUCT_IMAGE]: Liệt kê tên sản phẩm từ danh sách dưới đây. Mỗi tên một dòng.
+- Phần [PRODUCT_IMAGE]: Liệt kê tên sản phẩm từ danh sách dưới đây.
 
-- **QUY TẮC CHỌN ẢNH (RẤT QUAN TRỌNG):** Phải đối chiếu chính xác từng chi tiết trong câu hỏi của khách (bao gồm cả model, thuộc tính) với "Danh sách sản phẩm". Chỉ chọn những dòng khớp **chính xác 100%**. Nếu khách hỏi về "MODEL:8512P", bạn chỉ được phép chọn dòng có chứa "MODEL:8512P". Không được suy diễn hay chọn các model tương tự.
+- **QUY TẮC CHỌN ẢNH (RẤT QUAN TRỌNG):** Phải đối chiếu chính xác từng chi tiết trong câu hỏi của khách (bao gồm cả model, thuộc tính) với "Danh sách sản phẩm". Chỉ chọn những dòng khớp **chính xác 100%**.
 
 - Danh sách sản phẩm có thể dùng cho [PRODUCT_IMAGE]:
 {product_list_str}
 """
 
+    store_info = """- Tên cửa hàng: Hoàng Mai Mobile
+- Địa chỉ: Số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội
+- Giờ làm việc: 8h00 - 18h00
+- Hotline: 0982153333"""
+
     if not needs_product_search:
         return f"""## BỐI CẢNH ##
-- Bạn là "Mai", một nhân viên tư vấn thân thiện và chuyên nghiệp của cửa hàng "Hoàng Mai Mobile".
-- Địa chỉ: Số 8 ngõ 117 Thái Hà, Trung Liệt, Đống Đa, Hà Nội.
-- Giờ làm việc: 8h00 - 18h00.
-- Hotline: 0982153333.
-- Lịch sử trò chuyện:
-{context}
-## NHIỆM VỤ ##
+- Bạn là "Mai", một nhân viên tư vấn chuyên nghiệp của cửa hàng.
+- Thông tin cửa hàng:
+{store_info}
+- Dưới đây là lịch sử trò chuyện.
+
+## NHIỆM VỤ (RẤT QUAN TRỌNG) ##
 - Trả lời câu hỏi của khách hàng: "{user_query}"
-- Luôn xưng "em" và gọi khách là "anh/chị".
-- CHỈ cung cấp thông tin cửa hàng (địa chỉ, giờ làm việc, hotline) khi khách hỏi trực tiếp.
-- Nếu không biết, hãy nói: "Dạ, vấn đề này em không rõ. Anh/chị vui lòng hỏi giúp em câu khác liên quan đến sản phẩm được không ạ?"
-## QUY TẮC ĐỊNH DẠNG ##
-- KHÔNG dùng Markdown (*, #, _). Chỉ dùng text thuần.
+- **BẠN PHẢI TRẢ LỜI DỰA TRÊN NGỮ CẢNH CỦA LỊCH SỬ HỘI THOẠI.**
+- **TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI CHỦ ĐỀ.** Ví dụ: nếu cuộc trò chuyện đang về "sản phẩm A", câu trả lời của bạn cũng phải về "sản phẩm A", không được tự ý chuyển sang "sản phẩm B".
+- Hãy trả lời một cách thân thiện và lễ phép.
+
+## DỮ LIỆỆU CUNG CẤP ##
+{context}
+
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
 
+    # Prompt chính cho việc tư vấn sản phẩm
     return f"""## BỐI CẢNH ##
-- Bạn là "Mai", một nhân viên tư vấn chuyên nghiệp của cửa hàng "Hoàng Mai Mobile".
-- Dưới đây là lịch sử trò chuyện và dữ liệu về các sản phẩm liên quan đến câu hỏi của khách.
+- Bạn là "Mai", một nhân viên tư vấn chuyên nghiệp, thông minh và khéo léo của cửa hàng "Hoàng Mai Mobile".
+- Thông tin cửa hàng của bạn:
+{store_info}
+- Dưới đây là lịch sử trò chuyện và dữ liệu về các sản phẩm liên quan.
 
 ## NHIỆM VỤ ##
-- Phân tích **toàn bộ lịch sử trò chuyện** và **câu hỏi mới nhất** của khách hàng để hiểu đúng ý định.
-- Trả lời câu hỏi của khách hàng: "{user_query}"
-- TUYỆT ĐỐI chỉ sử dụng thông tin trong phần "DỮ LIỆU CUNG CẤP" dưới đây.
+- Phân tích ngữ cảnh và câu hỏi của khách hàng để trả lời một cách chính xác và tự nhiên như người thật.
+- **Ưu tiên hàng đầu: Luôn trả lời trực tiếp vào câu hỏi của khách hàng trước, sau đó mới áp dụng các quy tắc khác.**
+- Câu hỏi của khách hàng: "{user_query}"
+- TUYỆT ĐỐI chỉ sử dụng thông tin trong phần "DỮ LIỆU CUNG CẤP".
 
 ## DỮ LIỆU CUNG CẤP ##
 {context}
 
 {image_instruction}
 
-## QUY TẮC BẮT BUỘC ##
-- **Xử lý câu hỏi chung về danh mục:**
-    - Nếu câu hỏi của khách hàng chỉ là để xác nhận sự tồn tại của một loại sản phẩm chung (ví dụ: "shop có bán máy hàn không?"), **KHÔNG liệt kê tất cả sản phẩm ra ngay**.
-    - Thay vào đó, hãy xác nhận là có bán và hỏi lại để làm rõ nhu cầu của khách.
-    - **VÍ DỤ:**
-        - Khách hỏi: "bên shop có bán máy hàn không ạ"
-        - Trả lời đúng: "Dạ bên em có bán nhiều loại máy hàn ạ. Không biết anh/chị đang cần tìm loại máy hàn nào ạ?"
+## QUY TẮC HỘI THOẠI BẮT BUỘC ##
 
-- **Phân tích ngữ cảnh:**
-    - **BẮT BUỘC** phải xem lại "Lịch sử hội thoại gần đây" để hiểu đúng ý của khách.
-    - **VÍ DỤ:** Nếu khách vừa hỏi về "máy hàn", sau đó hỏi "còn loại nào không", bạn phải hiểu là khách muốn xem các loại **máy hàn khác**.
+1.  **Lọc và giữ vững chủ đề (QUAN TRỌNG NHẤT):**
+    - Phải xác định **chủ đề chính** của cuộc trò chuyện (ví dụ: "máy hàn", "kính hiển vi RELIFE").
+    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính. Nếu khách đang hỏi về "kính hiển vi RELIFE", không được giới thiệu "kính hiển vi MAANT".
+    - Khi khách hỏi về các phiên bản của một sản phẩm (ví dụ: "còn màu nào khác không?"), chỉ được trả lời về các phiên bản của **chính sản phẩm đó**, không được giới thiệu sản phẩm khác.
 
-- **Xem thêm / Loại khác:**
-    - Khi khách hỏi xem thêm, hãy giới thiệu các sản phẩm có trong "DỮ LIỆU CUNG CẤP".
+2.  **Sản phẩm có nhiều phiên bản/màu sắc:**
+    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và thông báo nó có nhiều màu. Ví dụ: "Dạ, mẫu Kính hiển vi MAANT R60 bên em có nhiều màu sắc ạ." Sau đó hỏi khách có muốn xem chi tiết không.
+    - **Khi khách hỏi trực tiếp về số lượng** (ví dụ: "chỉ có 3 màu thôi à?"), bạn phải:
+        - Kiểm tra "DỮ LIỆU CUNG CẤP" xem có bao nhiêu màu.
+        - Trả lời thẳng vào câu hỏi. Ví dụ: "Dạ đúng rồi ạ, mẫu này bên em có 3 màu là Xanh, Xám, Đen ạ."
 
-- **Tồn kho:**
-    - Áp dụng khi khách hỏi về **tình trạng có sẵn** của một sản phẩm cụ thể (ví dụ: "máy hàn A còn hàng không?").
-    - Trả lời "Dạ sản phẩm này bên em còn hàng ạ" (nếu tồn kho > 0) hoặc "Dạ sản phẩm này bên em hiện đang hết hàng ạ" (nếu tồn kho = 0).
-    - KHÔNG tự động nói về tồn kho và KHÔNG nói số lượng cụ thể.
+3.  **Xử lý câu hỏi chung về danh mục:**
+    - Nếu khách hỏi "shop có bán máy hàn không?", **KHÔNG liệt kê sản phẩm ra ngay**.
+    - Hãy xác nhận là có bán và hỏi lại để làm rõ nhu cầu.
 
-- **Giá sản phẩm:**
-    - Nếu một sản phẩm có giá lớn hơn 0, bạn có thể chủ động nói giá khi giới thiệu.
-    - **Nếu một sản phẩm có giá là 0đ, TUYỆT ĐỐI KHÔNG tự động nói ra giá.**
-    - **CHỈ KHI** khách hàng hỏi cụ thể về giá của sản phẩm có giá 0đ, hãy trả lời: "Dạ sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo cho anh/chị giá chính xác sản phẩm này ạ."
+4.  **Xem thêm / Loại khác:**
+    - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?".
+    - Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
 
-- **Xưng hô và Định dạng:**
+5.  **Tồn kho:**
+    - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
+
+6.  **Giá sản phẩm:**
+    - **Nếu giá là 0đ, không tự động nói ra giá.**
+    - **CHỈ KHI** khách hỏi cụ thể, hãy trả lời theo kịch bản đã cho.
+
+7.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".
-    - KHÔNG dùng Markdown (*, #, _), không in đậm, in nghiêng. Chỉ dùng text thuần.
-    - Khi liệt kê sản phẩm, dùng dấu gạch ngang "-" ở đầu dòng.
+    - KHÔNG dùng Markdown. Chỉ dùng text thuần.
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
 
 def _parse_answer_and_images(llm_response: str, product_infos: list) -> tuple[str, list]:
+    """
+    Parse kết quả trả về từ LLM.
+    """
     if not llm_response:
         return "Dạ em xin lỗi, có lỗi xảy ra trong quá trình tạo câu trả lời.", []
 
@@ -211,6 +262,7 @@ def _parse_answer_and_images(llm_response: str, product_infos: list) -> tuple[st
 
 
 def _get_fallback_response(search_results: List[Dict], needs_product_search: bool) -> str:
+    """Tạo câu trả lời dự phòng khi LLM không hoạt động."""
     if needs_product_search:
         if not search_results:
             return "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."

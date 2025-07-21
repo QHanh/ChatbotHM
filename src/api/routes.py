@@ -19,7 +19,7 @@ def _get_product_key(product: Dict) -> str:
 async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> ChatResponse:
     user_query = request.message
     model_choice = request.model_choice
-    
+
     if not user_query:
         raise HTTPException(status_code=400, detail="Không có tin nhắn nào được gửi")
 
@@ -28,7 +28,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "messages": [],
             "last_query": None,
             "offset": 0,
-            "shown_product_keys": set() # GỢI Ý: Thêm set để lưu các sản phẩm đã hiển thị
+            "shown_product_keys": set()
         }).copy()
         history = session_data["messages"][-10:].copy()
 
@@ -40,7 +40,6 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             user_query, session_data, history, model_choice, analysis_result
         )
     else:
-        # Khi có truy vấn mới, reset lại danh sách đã hiển thị
         session_data["shown_product_keys"] = set()
         response_text, retrieved_data, product_images = _handle_new_query(
             user_query, session_data, history, model_choice, analysis_result
@@ -57,28 +56,28 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     )
 
 def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
-    """Xử lý khi người dùng muốn xem thêm sản phẩm, có logic chống trùng lặp."""
+    """Xử lý khi người dùng muốn xem thêm sản phẩm."""
     last_query = session_data["last_query"]
     new_offset = session_data["offset"] + PAGE_SIZE
-    
+
+    # GỢI Ý: Bật cả hai chế độ tìm kiếm nghiêm ngặt theo thuộc tính và danh mục
     retrieved_data = search_products(
         product_name=last_query["product_name"],
         category=last_query["category"],
         properties=last_query["properties"],
-        offset=new_offset
+        offset=new_offset,
+        strict_properties=True,
+        strict_category=True
     )
 
-    # GỢI Ý: Lọc ra những sản phẩm đã được hiển thị trước đó
     shown_keys = session_data["shown_product_keys"]
     new_products = [p for p in retrieved_data if _get_product_key(p) not in shown_keys]
 
-    # GỢI Ý: Nếu sau khi lọc không còn sản phẩm mới, trả lời ngay mà không cần gọi LLM
     if not new_products:
-        response_text = "Dạ, em đã giới thiệu hết các mẫu tương tự rồi ạ."
+        response_text = "Dạ, hết rồi ạ."
         session_data["offset"] = new_offset
         return response_text, [], []
 
-    # Cập nhật danh sách các sản phẩm sẽ hiển thị
     for p in new_products:
         shown_keys.add(_get_product_key(p))
 
@@ -92,7 +91,7 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         product_images = result["product_images"]
     else:
         response_text = result
-    
+
     session_data["offset"] = new_offset
     session_data["shown_product_keys"] = shown_keys
     return response_text, new_products, product_images
@@ -101,7 +100,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
     """Xử lý câu hỏi mới."""
     retrieved_data = []
     product_images = []
-    
+
     if analysis["needs_search"]:
         search_params = analysis["search_params"]
         retrieved_data = search_products(
@@ -112,7 +111,6 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         )
         session_data["last_query"] = search_params
         session_data["offset"] = 0
-        # GỢI Ý: Cập nhật danh sách sản phẩm đã hiển thị cho truy vấn mới
         session_data["shown_product_keys"] = {_get_product_key(p) for p in retrieved_data}
 
     result = generate_llm_response(
@@ -124,9 +122,9 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         product_images = result["product_images"]
     else:
         response_text = result
-        
+
     return response_text, retrieved_data, product_images
-    
+
 def _update_chat_history(session_id: str, user_query: str, response_text: str, session_data: dict):
     with chat_history_lock:
         current_session = chat_history.get(session_id, {
@@ -139,19 +137,40 @@ def _update_chat_history(session_id: str, user_query: str, response_text: str, s
         chat_history[session_id] = current_session
 
 def _process_images(wants_images: bool, retrieved_data: list, product_images_names: list) -> list[ImageInfo]:
+    """
+    Xử lý và trả về danh sách ảnh.
+    Nếu một sản phẩm có nhiều ảnh, chỉ chọn ảnh đầu tiên làm ảnh đại diện.
+    """
     images = []
     if not wants_images or not retrieved_data or not product_images_names:
         return images
 
     product_map = { f"{p.get('product_name', '')} ({p.get('properties', '')})": p for p in retrieved_data if p.get('product_name')}
-    
+
     for name in product_images_names:
-        name = name.strip()
         product_data = product_map.get(name)
-        if product_data and product_data.get('avatar_images'):
-            images.append(ImageInfo(
-                product_name=product_data.get('product_name', ''),
-                image_url=product_data.get('avatar_images', ''),
-                product_link=str(product_data.get('link_product', ''))
-            ))
+        if product_data:
+            image_data = product_data.get('avatar_images')
+            if not image_data:
+                continue
+
+            primary_image_url = None
+            # Trường hợp image_data là một danh sách các URL
+            if isinstance(image_data, list) and image_data:
+                # Lấy URL hợp lệ đầu tiên trong danh sách làm ảnh đại diện
+                for url in image_data:
+                    if isinstance(url, str) and url.strip():
+                        primary_image_url = url
+                        break
+            # Trường hợp image_data là một URL duy nhất (dạng chuỗi)
+            elif isinstance(image_data, str) and image_data.strip():
+                primary_image_url = image_data
+
+            # Nếu đã tìm thấy ảnh đại diện hợp lệ, tạo đối tượng ImageInfo
+            if primary_image_url:
+                images.append(ImageInfo(
+                    product_name=product_data.get('product_name', ''),
+                    image_url=primary_image_url,
+                    product_link=str(product_data.get('link_product', ''))
+                ))
     return images

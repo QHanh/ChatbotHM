@@ -1,67 +1,63 @@
 from elastic_search_push_data import es_client, INDEX_NAME
 from src.config.settings import PAGE_SIZE
 
-# GỢI Ý: Thêm tham số `require_properties` để linh hoạt hơn trong việc tìm kiếm.
-def search_products(product_name: str, category: str = None, properties: str = None, offset: int = 0, require_properties: bool = False) -> list:
+def search_products(
+    product_name: str,
+    category: str = None,
+    properties: str = None,
+    offset: int = 0,
+    strict_properties: bool = False,
+    strict_category: bool = False
+) -> list:
     """
-    Tìm kiếm sản phẩm trong Elasticsearch bằng cách kết hợp truy vấn,
-    ưu tiên (boost) các sản phẩm trùng khớp cao hơn.
-    Hỗ trợ phân trang với `offset`.
+    Tìm kiếm sản phẩm trong Elasticsearch.
+    Hỗ trợ tìm kiếm cân bằng, không quá rộng cũng không quá nghiêm ngặt.
     """
     if not category:
         category = product_name
 
-    must_clauses = [
-        {"match": {"product_name": product_name}},
-        {"match": {"category": category}},
-    ]
+    must_clauses = []
     should_clauses = []
+    filter_clauses = [] # Filter không dùng trong logic này nữa để linh hoạt hơn
+
+    # Tên sản phẩm luôn là điều kiện quan trọng
+    must_clauses.append({"match": {"product_name": {"query": product_name, "boost": 2.0}}})
+
+    # GỢI Ý: Logic mới cân bằng hơn cho category
+    if category:
+        if strict_category:
+            # Khi xem thêm, BẮT BUỘC phải khớp category, nhưng dùng 'match' để linh hoạt
+            must_clauses.append({"match": {"category": category}})
+        else:
+            # Khi tìm lần đầu, category là yếu tố "nên có" để tăng điểm
+            should_clauses.append({"match": {"category": category}})
 
     if properties:
-        # GỢI Ý: Nếu `require_properties` là True, thuộc tính sẽ là điều kiện bắt buộc.
-        if require_properties:
+        if strict_properties:
             must_clauses.append({"match": {"properties": properties}})
         else:
-            # Ngược lại, nó chỉ giúp tăng điểm cho kết quả khớp.
             should_clauses.append({"match": {"properties": {"query": properties, "boost": 0.8}}})
 
     combined_query = {
         "query": {
             "bool": {
-                "should": [
-                    {
-                        "bool": {
-                            "must": must_clauses,
-                            "should": should_clauses,
-                            "boost": 3
-                        }
-                    },
-                    {
-                        "multi_match": {
-                            "query": product_name,
-                            "fields": [
-                                "product_name^2",
-                                "category",
-                                "specifications",
-                                "trademark"
-                            ],
-                            "fuzziness": "AUTO"
-                        }
-                    }
-                ]
+                "must": must_clauses,
+                "should": should_clauses,
+                "filter": filter_clauses, # Sẽ rỗng, nhưng giữ lại cấu trúc
             }
         }
     }
+
     try:
         response = es_client.search(
-            index=INDEX_NAME, 
-            body=combined_query, 
+            index=INDEX_NAME,
+            body=combined_query,
             size=PAGE_SIZE,
             from_=offset
         )
         hits = [hit['_source'] for hit in response['hits']['hits']]
-        print(f"Tìm thấy {len(hits)} sản phẩm với truy vấn kết hợp (offset={offset}).")
+        print(f"Tìm thấy {len(hits)} sản phẩm (offset={offset}, strict_cat={strict_category}, strict_prop={strict_properties}).")
         return hits
     except Exception as e:
-        print(f"Lỗi khi tìm kiếm kết hợp: {e}")
+        print(f"Lỗi khi tìm kiếm: {e}")
         return []

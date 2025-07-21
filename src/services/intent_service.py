@@ -13,11 +13,13 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
         for turn in history[-5:]:
             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
-    # GỢI Ý: Thêm chỉ dẫn và ví dụ về cách xử lý các câu trả lời ngắn, nối tiếp trong hội thoại.
+    # GỢI Ý: Đã tích hợp logic và ví dụ về category của bạn vào prompt này.
     prompt = f"""
     Bạn là một AI phân tích truy vấn của khách hàng. Dựa vào lịch sử hội thoại và câu hỏi mới nhất, hãy phân tích và trả về một đối tượng JSON.
-    QUAN TRỌNG: Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước (ví dụ: bot hỏi chọn A hay B, khách trả lời "A"), hãy kế thừa ý định từ lượt trước đó. Nếu ý định trước đó cần thông tin sản phẩm, thì "needs_search" phải là "true".
-
+    QUAN TRỌNG: 
+    - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
+    - Nếu câu hỏi của khách hàng quá ngắn, là một lời chào, lời cảm ơn, hoặc không rõ ràng về sản phẩm (ví dụ: "ok", "thanks", "ho", "hi", "uk"), hãy đặt "needs_search" là "false".
+    
     Lịch sử hội thoại gần đây:
     {history_text}
 
@@ -29,19 +31,22 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
       "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", ngược lại false>,
       "search_params": {{
-        "product_name": "<Tên chính của sản phẩm>",
-        "category": "<Danh mục chung của sản phẩm>",
+        "product_name": "<Tên sản phẩm khách hàng đang đề cập>",
+        "category": "<Danh mục sản phẩm. Quy tắc: Nếu khách hỏi 'đèn kính hiển vi', category là 'đèn'. Nếu khách hỏi 'kính hiển vi', category là 'kính hiển vi'. Nếu khách hỏi 'kính hiển vi 2 mắt', category là 'kính hiển vi 2 mắt'. Nếu không thể xác định, hãy để category giống product_name.>",
         "properties": "<Các thuộc tính cụ thể như model, màu sắc...>"
       }}
     }}
 
     Ví dụ:
-    - Bối cảnh: Bot vừa hỏi "Anh/chị muốn biết thông số của model 8512P hay 8512D ạ?". Khách trả lời: "8512P"
-      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": true, "search_params": {{"product_name": "máy khò hàn", "category": "Máy khò", "properties": "8512P"}}}}
+    - Câu hỏi: "shop có đèn kính hiển vi không"
+      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": ""}}}}
 
-    - Câu hỏi: "shop có bán iphone 15 pro max màu xanh không?"
-      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "iphone 15 pro max", "category": "điện thoại", "properties": "màu xanh"}}}}
+    - Câu hỏi: "shop có kính hiển vi không"
+      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "kính hiển vi", "category": "kính hiển vi", "properties": ""}}}}
 
+    - Câu hỏi: "shop có kính hiển vi 2 mắt màu xanh không"
+      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh"}}}}
+  
     - Câu hỏi: "cho xem ảnh máy khò kaisi model 8512p"
       JSON: {{"needs_search": true, "wants_images": true, "wants_specs": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P"}}}}
 
