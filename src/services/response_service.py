@@ -249,10 +249,6 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Luôn xưng "em", gọi khách là "anh/chị".
     - KHÔNG dùng Markdown. Chỉ dùng text thuần.
 
-11.  **Xử lý yêu cầu xem ảnh chung:**
-    - Nếu khách hàng vừa xem một danh sách sản phẩm và sau đó hỏi chung chung "có ảnh không" hoặc "cho xem ảnh tất cả", **nhiệm vụ của bạn là hiển thị hình ảnh cho TẤT CẢ các sản phẩm trong "DỮ LIỆU CUNG CẤP".**
-    - **TUYỆT ĐỐI KHÔNG** hỏi lại "Anh/chị muốn xem ảnh những loại nào ạ?". Hãy đi thẳng vào việc liệt kê sản phẩm kèm ảnh theo "HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH".
-
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
 
