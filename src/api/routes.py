@@ -60,7 +60,6 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     last_query = session_data["last_query"]
     new_offset = session_data["offset"] + PAGE_SIZE
 
-    # GỢI Ý: Bật cả hai chế độ tìm kiếm nghiêm ngặt theo thuộc tính và danh mục
     retrieved_data = search_products(
         product_name=last_query["product_name"],
         category=last_query["category"],
@@ -89,6 +88,9 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     if analysis["wants_images"] and isinstance(result, dict):
         response_text = result["answer"]
         product_images = result["product_images"]
+        if response_text and product_images:
+             response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:\n" + response_text
+
     else:
         response_text = result
 
@@ -120,6 +122,9 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
     if analysis["wants_images"] and isinstance(result, dict):
         response_text = result["answer"]
         product_images = result["product_images"]
+        if response_text and product_images:
+             response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:\n" + response_text
+
     else:
         response_text = result
 

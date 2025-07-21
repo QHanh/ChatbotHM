@@ -19,7 +19,6 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     QUAN TRỌNG: 
     - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
     - Nếu câu hỏi của khách hàng quá ngắn, là một lời chào, lời cảm ơn, hoặc không rõ ràng về sản phẩm (ví dụ: "ok", "thanks", "ho", "hi", "uk"), hãy đặt "needs_search" là "false".
-    
     Lịch sử hội thoại gần đây:
     {history_text}
 

@@ -28,8 +28,11 @@ def generate_llm_response(
         return {"answer": answer, "product_images": []} if wants_images else answer
 
     context = ""
-    if history:
+    has_history = bool(history)
+    if has_history:
         context += f"Lịch sử hội thoại gần đây:\n{format_history_text(history)}\n"
+    else:
+        context += "Lịch sử hội thoại gần đây:\n(Đây là tin nhắn đầu tiên)\n"
 
     if needs_product_search:
         if not search_results:
@@ -42,7 +45,7 @@ def generate_llm_response(
         for p in search_results if p.get('product_name')
     ] if wants_images else []
 
-    prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos)
+    prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos, has_history)
 
     print("--- PROMPT GỬI ĐẾN LLM ---")
     print(prompt)
@@ -131,7 +134,7 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
     return product_context
 
 
-def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None) -> str:
+def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None, has_history: bool = None) -> str:
     """
     Xây dựng prompt cho LLM với các quy tắc hội thoại nâng cao.
     """
@@ -140,10 +143,19 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
         product_list_str = '\n'.join(f'- {info}' for info in product_infos or [])
         image_instruction = f"""## HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH ##
 - Khi khách muốn xem ảnh, câu trả lời PHẢI có 2 phần: [ANSWER] và [PRODUCT_IMAGE].
-- Phần [ANSWER]: Bắt đầu bằng "Dạ đây là hình ảnh sản phẩm ạ." và nội dung tư vấn.
-- Phần [PRODUCT_IMAGE]: Liệt kê tên sản phẩm từ danh sách dưới đây.
+- **Phần [ANSWER]:**
+    - Liệt kê lại các sản phẩm mà khách muốn xem ảnh.
+    - **Mỗi sản phẩm phải nằm trên một dòng riêng**, bắt đầu bằng dấu gạch ngang (-).
+    - Ghi rõ Tên và Giá của sản phẩm.
+    - **VÍ DỤ ĐỊNH DẠNG PHẦN ANSWER:**
+        - Máy hàn OSSTEAM T210 - giá 145,000đ
+        - Máy hàn MECHANIC A210 - giá 780,000đ
 
-- **QUY TẮC CHỌN ẢNH (RẤT QUAN TRỌNG):** Phải đối chiếu chính xác từng chi tiết trong câu hỏi của khách (bao gồm cả model, thuộc tính) với "Danh sách sản phẩm". Chỉ chọn những dòng khớp **chính xác 100%**.
+- **Phần [PRODUCT_IMAGE]:**
+    - Liệt kê CHÍNH XÁC tên định danh (có dạng Tên (Thuộc tính)) của các sản phẩm đã liệt kê trong phần [ANSWER].
+    - **Mỗi tên một dòng và phải theo đúng thứ tự** đã liệt kê ở phần [ANSWER].
+
+- **QUY TẮC CHỌN ẢNH:** Phải đối chiếu chính xác từng chi tiết trong câu hỏi của khách (bao gồm cả model, thuộc tính) với "Danh sách sản phẩm". Chỉ chọn những dòng khớp **chính xác 100%**.
 
 - Danh sách sản phẩm có thể dùng cho [PRODUCT_IMAGE]:
 {product_list_str}
@@ -153,6 +165,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - Địa chỉ: Số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội
 - Giờ làm việc: 8h00 - 18h00
 - Hotline: 0982153333"""
+
+    greeting_rule = ""
+    if not has_history:
+        greeting_rule = '- **Chào hỏi:** Bắt đầu câu trả lời bằng lời chào đầy đủ "Dạ, em chào anh/chị ạ." vì đây là tin nhắn đầu tiên.'
+    else:
+        greeting_rule = '- **Chào hỏi:** KHÔNG chào hỏi đầy đủ. Bắt đầu câu trả lời trực tiếp bằng "Dạ,".'
 
     if not needs_product_search:
         return f"""## BỐI CẢNH ##
@@ -166,6 +184,10 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - **BẠN PHẢI TRẢ LỜI DỰA TRÊN NGỮ CẢNH CỦA LỊCH SỬ HỘI THOẠI.**
 - **TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI CHỦ ĐỀ.** Ví dụ: nếu cuộc trò chuyện đang về "sản phẩm A", câu trả lời của bạn cũng phải về "sản phẩm A", không được tự ý chuyển sang "sản phẩm B".
 - Hãy trả lời một cách thân thiện và lễ phép.
+- Khi khách hỏi về thông tin cửa hàng, hãy trả lời dựa vào thông tin đã cung cấp.
+
+## QUY TẮC ##
+{greeting_rule}
 
 ## DỮ LIỆỆU CUNG CẤP ##
 {context}
@@ -192,36 +214,44 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 {image_instruction}
 
 ## QUY TẮC HỘI THOẠI BẮT BUỘC ##
+1.  {greeting_rule}
 
-1.  **Lọc và giữ vững chủ đề (QUAN TRỌNG NHẤT):**
+2.  **Thông tin cửa hàng:**
+    - **CHỈ** cung cấp địa chỉ, giờ làm việc, hoặc hotline khi khách hàng hỏi trực tiếp về chúng.
+
+3.  **Lọc và giữ vững chủ đề (QUAN TRỌNG NHẤT):**
     - Phải xác định **chủ đề chính** của cuộc trò chuyện (ví dụ: "máy hàn", "kính hiển vi RELIFE").
-    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính. Nếu khách đang hỏi về "kính hiển vi RELIFE", không được giới thiệu "kính hiển vi MAANT".
-    - Khi khách hỏi về các phiên bản của một sản phẩm (ví dụ: "còn màu nào khác không?"), chỉ được trả lời về các phiên bản của **chính sản phẩm đó**, không được giới thiệu sản phẩm khác.
+    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính.
 
-2.  **Sản phẩm có nhiều phiên bản/màu sắc:**
-    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và thông báo nó có nhiều màu. Ví dụ: "Dạ, mẫu Kính hiển vi MAANT R60 bên em có nhiều màu sắc ạ." Sau đó hỏi khách có muốn xem chi tiết không.
-    - **Khi khách hỏi trực tiếp về số lượng** (ví dụ: "chỉ có 3 màu thôi à?"), bạn phải:
-        - Kiểm tra "DỮ LIỆU CUNG CẤP" xem có bao nhiêu màu.
-        - Trả lời thẳng vào câu hỏi. Ví dụ: "Dạ đúng rồi ạ, mẫu này bên em có 3 màu là Xanh, Xám, Đen ạ."
+4.  **Sản phẩm có nhiều phiên bản/màu sắc:**
+    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và thông báo nó có nhiều màu. Sau đó hỏi khách có muốn xem chi tiết không.
+    - **Khi khách hỏi trực tiếp về số lượng** (ví dụ: "chỉ có 3 màu thôi à?"), bạn phải trả lời thẳng vào câu hỏi.
 
-3.  **Xử lý câu hỏi chung về danh mục:**
-    - Nếu khách hỏi "shop có bán máy hàn không?", **KHÔNG liệt kê sản phẩm ra ngay**.
-    - Hãy xác nhận là có bán và hỏi lại để làm rõ nhu cầu.
+5.  **Xử lý câu hỏi chung về danh mục:**
+    - Nếu khách hỏi "shop có bán máy hàn không?", **KHÔNG liệt kê sản phẩm ra ngay**. Hãy xác nhận là có bán và hỏi lại để làm rõ nhu cầu.
 
-4.  **Xem thêm / Loại khác:**
-    - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?".
-    - Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
+6.  **Liệt kê sản phẩm:**
+    - Khi khách hàng yêu cầu liệt kê các sản phẩm (ví dụ: "có những loại nào", "kể hết ra đi"), bạn **PHẢI** trình bày câu trả lời dưới dạng một danh sách rõ ràng.
+    - **Mỗi sản phẩm phải nằm trên một dòng riêng**, bắt đầu bằng dấu gạch ngang (-).
+    - **KHÔNG** được gộp tất cả các tên sản phẩm vào trong một đoạn văn.
 
-5.  **Tồn kho:**
+7.  **Xem thêm / Loại khác:**
+    - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?". Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
+
+8.  **Tồn kho:**
     - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
 
-6.  **Giá sản phẩm:**
+9.  **Giá sản phẩm:**
     - **Nếu giá là 0đ, không tự động nói ra giá.**
     - **CHỈ KHI** khách hỏi cụ thể, hãy trả lời theo kịch bản đã cho.
 
-7.  **Xưng hô và Định dạng:**
+10.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".
     - KHÔNG dùng Markdown. Chỉ dùng text thuần.
+
+11.  **Xử lý yêu cầu xem ảnh chung:**
+    - Nếu khách hàng vừa xem một danh sách sản phẩm và sau đó hỏi chung chung "có ảnh không" hoặc "cho xem ảnh tất cả", **nhiệm vụ của bạn là hiển thị hình ảnh cho TẤT CẢ các sản phẩm trong "DỮ LIỆU CUNG CẤP".**
+    - **TUYỆT ĐỐI KHÔNG** hỏi lại "Anh/chị muốn xem ảnh những loại nào ạ?". Hãy đi thẳng vào việc liệt kê sản phẩm kèm ảnh theo "HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH".
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
@@ -242,7 +272,7 @@ def _parse_answer_and_images(llm_response: str, product_infos: list) -> tuple[st
 
     if len(parts) == 2:
         answer = re.sub(r'\[ANSWER\]', '', parts[0], flags=re.IGNORECASE).strip()
-        image_lines = [clean_name(l) for l in re.split(r'[\n,]+', parts[1]) if l.strip()]
+        image_lines = [clean_name(l) for l in re.split(r'[\n]+', parts[1]) if l.strip()]
         valid_product_names = set(product_infos)
         product_images = [line for line in image_lines if line in valid_product_names and line.upper() != 'NONE']
 
