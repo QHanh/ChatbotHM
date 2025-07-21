@@ -30,7 +30,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "offset": 0,
             "shown_product_keys": set()
         }).copy()
-        history = session_data["messages"][-10:].copy()
+        history = session_data["messages"][-14:].copy()
 
     analysis_result = analyze_intent_and_extract_entities(user_query, history, model_choice)
     asking_for_more = is_asking_for_more(user_query)
@@ -89,7 +89,7 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         response_text = result["answer"]
         product_images = result["product_images"]
         if response_text and product_images:
-             response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:\n" + response_text
+            response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:\n" + response_text
 
     else:
         response_text = result
@@ -123,7 +123,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         response_text = result["answer"]
         product_images = result["product_images"]
         if response_text and product_images:
-             response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:\n" + response_text
+            response_text = response_text
 
     else:
         response_text = result

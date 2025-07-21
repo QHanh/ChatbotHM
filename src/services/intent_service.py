@@ -30,7 +30,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
       "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", ngược lại false>,
       "search_params": {{
-        "product_name": "<Tên sản phẩm khách hàng đang đề cập>",
+        "product_name": "<Tên sản phẩm khách hàng đang đề cập bao gồm luôn cả tên phụ kiện đi kèm>",
         "category": "<Danh mục sản phẩm. Quy tắc: Nếu khách hỏi 'đèn kính hiển vi', category là 'đèn'. Nếu khách hỏi 'kính hiển vi', category là 'kính hiển vi'. Nếu khách hỏi 'kính hiển vi 2 mắt', category là 'kính hiển vi 2 mắt'. Nếu không thể xác định, hãy để category giống product_name.>",
         "properties": "<Các thuộc tính cụ thể như model, màu sắc...>"
       }}
@@ -48,6 +48,9 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
   
     - Câu hỏi: "cho xem ảnh máy khò kaisi model 8512p"
       JSON: {{"needs_search": true, "wants_images": true, "wants_specs": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P"}}}}
+
+    - Câu hỏi: "có máy hàn dùng mũi C210 không"
+      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": ""}}}}
 
     JSON của bạn:
     """

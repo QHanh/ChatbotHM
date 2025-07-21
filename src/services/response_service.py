@@ -113,7 +113,7 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
             ]
             unique_properties = sorted(list(set(properties_list)))
             if unique_properties:
-                product_context += f"  Lưu ý: Sản phẩm này có các phiên bản/màu sắc: {', '.join(unique_properties)}\n"
+                product_context += f"  Lưu ý: Sản phẩm này có các thuộc tính khác nhau (ví dụ: cỡ, model, màu sắc,...): {', '.join(unique_properties)}\n"
         else:
             # Nếu chỉ có 1, hiển thị thuộc tính của nó
             prop = first_item.get('properties')
@@ -131,6 +131,8 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
 
         if include_specs:
             product_context += f"  Mô tả: {first_item.get('specifications', 'N/A')}\n"
+        
+        product_context += f"- Link sản phẩm: {first_item.get('link_product', 'N/A')}\n"
     return product_context
 
 
@@ -174,7 +176,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
     if not needs_product_search:
         return f"""## BỐI CẢNH ##
-- Bạn là "Mai", một nhân viên tư vấn chuyên nghiệp của cửa hàng.
+- Bạn là một nhân viên tư vấn chuyên nghiệp của cửa hàng.
 - Thông tin cửa hàng:
 {store_info}
 - Dưới đây là lịch sử trò chuyện.
@@ -189,15 +191,14 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 ## QUY TẮC ##
 {greeting_rule}
 
-## DỮ LIỆỆU CUNG CẤP ##
+## DỮ LIỆU CUNG CẤP ##
 {context}
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
 
-    # Prompt chính cho việc tư vấn sản phẩm
     return f"""## BỐI CẢNH ##
-- Bạn là "Mai", một nhân viên tư vấn chuyên nghiệp, thông minh và khéo léo của cửa hàng "Hoàng Mai Mobile".
+- Bạn là một nhân viên tư vấn chuyên nghiệp, thông minh và khéo léo.
 - Thông tin cửa hàng của bạn:
 {store_info}
 - Dưới đây là lịch sử trò chuyện và dữ liệu về các sản phẩm liên quan.
@@ -223,12 +224,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Phải xác định **chủ đề chính** của cuộc trò chuyện (ví dụ: "máy hàn", "kính hiển vi RELIFE").
     - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính.
 
-4.  **Sản phẩm có nhiều phiên bản/màu sắc:**
-    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và thông báo nó có nhiều màu. Sau đó hỏi khách có muốn xem chi tiết không.
+4.  **Sản phẩm có nhiều model, combo, cỡ, màu sắc,... (tùy thuộc tính):**
+    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và hãy thông báo có nhiều màu hoặc có nhiều model hoặc có nhiều cỡ,... (tùy vào thuộc tính của sản phẩm). Sau đó ở cuối có thể hỏi khách có muốn xem chi tiết không?
     - **Khi khách hỏi trực tiếp về số lượng** (ví dụ: "chỉ có 3 màu thôi à?"), bạn phải trả lời thẳng vào câu hỏi.
 
 5.  **Xử lý câu hỏi chung về danh mục:**
-    - Nếu khách hỏi "shop có bán máy hàn không?", **KHÔNG liệt kê sản phẩm ra ngay**. Hãy xác nhận là có bán và hỏi lại để làm rõ nhu cầu.
+    - Nếu khách hỏi "shop có bán máy hàn không?, có kính hiển vi không?", **KHÔNG liệt kê sản phẩm ra ngay**. Hãy xác nhận là có bán và có thể nói ra một số đặc điểm riêng biệt như thương hiệu, hãng có trong dữ liệu cung cấp và hỏi lại để làm rõ nhu cầu lựa chọn.
 
 6.  **Liệt kê sản phẩm:**
     - Khi khách hàng yêu cầu liệt kê các sản phẩm (ví dụ: "có những loại nào", "kể hết ra đi"), bạn **PHẢI** trình bày câu trả lời dưới dạng một danh sách rõ ràng.
@@ -242,12 +243,15 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
 
 9.  **Giá sản phẩm:**
-    - **Nếu giá là 0đ, không tự động nói ra giá.**
+    - **Nếu giá là 0đ, không tự động nói ra giá. Nếu họ hỏi giá sản phẩm có giá 0đ hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý"**
     - **CHỈ KHI** khách hỏi cụ thể, hãy trả lời theo kịch bản đã cho.
 
 10.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".
     - KHÔNG dùng Markdown. Chỉ dùng text thuần.
+
+11.  **Link sản phẩm**
+    - Bạn cứ gửi kèm link sản phẩm khi liệt kê các sản phẩm ra và chỉ cần đưa mỗi link gắn vào cuối tên sản phẩm **không cần thêm gì hết**.
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
