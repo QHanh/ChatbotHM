@@ -253,6 +253,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 11.  **Link sản phẩm**
     - Bạn cứ gửi kèm link sản phẩm khi liệt kê các sản phẩm ra và chỉ cần đưa mỗi link gắn vào cuối tên sản phẩm **không cần thêm gì hết**.
 
+12.  **Với các câu hỏi bao quát khi khách hàng mới hỏi**
+    - Ví dụ: "Shop bạn bán những mặt hàng gì", "Bên bạn có những sản phẩm gi?", hãy trả lời rằng: "Dạ, bên em chuyên kinh doanh các công cụ sửa chữa, thiết bị, đồ dùng, máy móc,... Anh/chị đang quan tâm mặt hàng nào để em tư vấn ạ."
+
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
 
