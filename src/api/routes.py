@@ -225,7 +225,7 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     
     product_images = []
     if analysis["wants_images"] and isinstance(result, dict):
-        response_text = result["answer"]
+        response_text = result["answer"].strip()
         product_images = result["product_images"]
         if response_text and product_images:
             response_text = response_text
@@ -257,7 +257,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
     )
     
     if analysis["wants_images"] and isinstance(result, dict):
-        response_text = result["answer"]
+        response_text = result["answer"].strip()
         product_images = result["product_images"]
         if response_text and product_images:
             response_text = response_text
