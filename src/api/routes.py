@@ -2,8 +2,8 @@ from fastapi import HTTPException
 from typing import Dict, Any, List, Set
 import threading
 
-from src.models.schemas import ChatRequest, ChatResponse, ImageInfo
-from src.services.intent_service import analyze_intent_and_extract_entities
+from src.models.schemas import ChatRequest, ChatResponse, ImageInfo, PurchaseItem, CustomerInfo
+from src.services.intent_service import analyze_intent_and_extract_entities, extract_customer_info
 from src.services.search_service import search_products
 from src.services.response_service import generate_llm_response
 from src.utils.helpers import is_asking_for_more
@@ -28,14 +28,113 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "messages": [],
             "last_query": None,
             "offset": 0,
-            "shown_product_keys": set()
+            "shown_product_keys": set(),
+            "state": None, 
+            "pending_purchase_item": None
         }).copy()
         history = session_data["messages"][-14:].copy()
 
+    if session_data.get("state") == "awaiting_purchase_confirmation":
+        affirmative_responses = ["đúng", "vâng", "ok", "đồng ý", "chốt", "uk", "uh", "ừ", "dạ", "um", "uhm", "ừm", "yes", "chuẩn", "vang", "da", "ừa"]
+        if any(word in user_query.lower() for word in affirmative_responses):
+            pending_item = session_data.get("pending_purchase_item", {})
+            product_data = pending_item.get("product_data", {})
+            product_link = product_data.get("link_product", "#")
+
+            response_text = (
+                f"Dạ vâng ạ. Vậy để đặt đơn hàng, anh/chị có thể vào đường link {product_link} để đặt hàng hoặc đến xem trực tiếp tại cửa hàng chúng em tại số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội (thời gian mở cửa từ 8h đến 18h).\n"
+                "Dạ anh/chị vui lòng cho em xin tên, số điện thoại và địa chỉ để em lên đơn cho anh/chị ạ.\n"
+                "Em cảm ơn anh/chị nhiều ạ."
+            )
+            session_data["state"] = "awaiting_customer_info"
+            
+            _update_chat_history(session_id, user_query, response_text, session_data)
+            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
+        else:
+            session_data["state"] = None
+            session_data["pending_purchase_item"] = None
+
+    if session_data.get("state") == "awaiting_customer_info":
+        customer_data = extract_customer_info(user_query, model_choice)
+        item_data_with_quantity = session_data.get("pending_purchase_item", {})
+        
+        item_data = item_data_with_quantity.get("product_data", {})
+        quantity = item_data_with_quantity.get("quantity", 1)
+        
+        props_value = item_data.get("properties")
+        final_props = None
+        if props_value is not None and str(props_value).strip() not in ['0', '']:
+            final_props = str(props_value)
+            
+        purchase_item = PurchaseItem(
+            product_name=item_data.get("product_name", "N/A"),
+            properties=final_props,
+            quantity=quantity
+        )
+
+        customer_info_obj = CustomerInfo(
+            name=customer_data.get("name"),
+            phone=customer_data.get("phone"),
+            address=customer_data.get("address"),
+            items=[purchase_item]
+        )
+        
+        response_text = "Dạ em đã nhận được thông tin. Em cảm ơn anh/chị!"
+        session_data["state"] = None
+        session_data["pending_purchase_item"] = None
+        
+        _update_chat_history(session_id, user_query, response_text, session_data)
+        
+        return ChatResponse(
+            reply=response_text,
+            history=chat_history[session_id]["messages"].copy(),
+            customer_info=customer_info_obj,
+            has_purchase=True
+        )
+
     analysis_result = analyze_intent_and_extract_entities(user_query, history, model_choice)
+    
+    response_text, retrieved_data, product_images = "", [], []
     asking_for_more = is_asking_for_more(user_query)
 
-    if asking_for_more and session_data.get("last_query"):
+    if analysis_result.get("is_purchase_intent"):
+        search_params = analysis_result["search_params"]
+        requested_quantity = search_params.get("quantity", 1)
+
+        products = search_products(
+            product_name=search_params.get("product_name") or session_data.get("last_query", {}).get("product_name", ""),
+            category=search_params.get("category") or session_data.get("last_query", {}).get("category", ""),
+            properties=search_params.get("properties") or session_data.get("last_query", {}).get("properties", ""),
+            # strict_properties=True
+        )
+        if products:
+            product_to_confirm = products[0]
+            product_name = product_to_confirm.get("product_name")
+            properties = product_to_confirm.get("properties")
+            available_stock = product_to_confirm.get("inventory", 0)
+            
+            full_name = product_name
+            if properties and str(properties).strip() not in ['0', '']:
+                full_name = f"{product_name} ({properties})"
+            
+            # Bắt đầu kiểm tra tồn kho
+            if available_stock == 0:
+                response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em hiện đang hết hàng ạ."
+            elif requested_quantity > available_stock:
+                response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em chỉ còn {available_stock} sản phẩm ạ. Anh/chị có thể lấy số lượng này được không ạ."
+            else:
+                # Nếu đủ hàng, tiến hành xác nhận
+                response_text = f"Dạ, em xác nhận anh/chị muốn đặt mua sản phẩm {full_name} (Số lượng: {requested_quantity}) đúng không ạ?"
+                session_data["state"] = "awaiting_purchase_confirmation"
+                # Lưu cả sản phẩm và số lượng khách muốn mua
+                session_data["pending_purchase_item"] = {
+                    "product_data": product_to_confirm,
+                    "quantity": requested_quantity
+                }
+        else:
+            response_text = "Dạ, em chưa xác định được sản phẩm anh/chị muốn mua. Anh/chị vui lòng cho em biết tên sản phẩm cụ thể ạ?"
+    
+    elif asking_for_more and session_data.get("last_query"):
         response_text, retrieved_data, product_images = _handle_more_products(
             user_query, session_data, history, model_choice, analysis_result
         )
@@ -46,17 +145,17 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         )
 
     _update_chat_history(session_id, user_query, response_text, session_data)
-    images = _process_images(analysis_result["wants_images"], retrieved_data, product_images)
+    images = _process_images(analysis_result.get("wants_images", False), retrieved_data, product_images)
 
     return ChatResponse(
         reply=response_text,
         history=chat_history.get(session_id, {}).get("messages", []).copy(),
         images=images,
-        has_images=len(images) > 0
+        has_images=len(images) > 0,
+        has_purchase=analysis_result.get("is_purchase_intent", False)
     )
 
 def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
-    """Xử lý khi người dùng muốn xem thêm sản phẩm."""
     last_query = session_data["last_query"]
     new_offset = session_data["offset"] + PAGE_SIZE
 
@@ -89,8 +188,7 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         response_text = result["answer"]
         product_images = result["product_images"]
         if response_text and product_images:
-            response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:\n" + response_text
-
+            response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:" + response_text
     else:
         response_text = result
 
@@ -99,7 +197,6 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
     return response_text, new_products, product_images
 
 def _handle_new_query(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
-    """Xử lý câu hỏi mới."""
     retrieved_data = []
     product_images = []
 
@@ -123,8 +220,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         response_text = result["answer"]
         product_images = result["product_images"]
         if response_text and product_images:
-            response_text = response_text
-
+            response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:" + response_text
     else:
         response_text = result
 
@@ -133,19 +229,18 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
 def _update_chat_history(session_id: str, user_query: str, response_text: str, session_data: dict):
     with chat_history_lock:
         current_session = chat_history.get(session_id, {
-            "messages": [], "last_query": None, "offset": 0, "shown_product_keys": set()
+            "messages": [], "last_query": None, "offset": 0, "shown_product_keys": set(), "state": None, "pending_purchase_item": None
         })
         current_session["messages"].append({"user": user_query, "bot": response_text})
         current_session["last_query"] = session_data.get("last_query")
         current_session["offset"] = session_data.get("offset")
         current_session["shown_product_keys"] = session_data.get("shown_product_keys", set())
+        current_session["state"] = session_data.get("state")
+        current_session["pending_purchase_item"] = session_data.get("pending_purchase_item")
+
         chat_history[session_id] = current_session
 
 def _process_images(wants_images: bool, retrieved_data: list, product_images_names: list) -> list[ImageInfo]:
-    """
-    Xử lý và trả về danh sách ảnh.
-    Nếu một sản phẩm có nhiều ảnh, chỉ chọn ảnh đầu tiên làm ảnh đại diện.
-    """
     images = []
     if not wants_images or not retrieved_data or not product_images_names:
         return images
@@ -160,18 +255,14 @@ def _process_images(wants_images: bool, retrieved_data: list, product_images_nam
                 continue
 
             primary_image_url = None
-            # Trường hợp image_data là một danh sách các URL
             if isinstance(image_data, list) and image_data:
-                # Lấy URL hợp lệ đầu tiên trong danh sách làm ảnh đại diện
                 for url in image_data:
                     if isinstance(url, str) and url.strip():
                         primary_image_url = url
                         break
-            # Trường hợp image_data là một URL duy nhất (dạng chuỗi)
             elif isinstance(image_data, str) and image_data.strip():
                 primary_image_url = image_data
 
-            # Nếu đã tìm thấy ảnh đại diện hợp lệ, tạo đối tượng ImageInfo
             if primary_image_url:
                 images.append(ImageInfo(
                     product_name=product_data.get('product_name', ''),

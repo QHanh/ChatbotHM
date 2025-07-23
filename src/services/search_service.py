@@ -18,32 +18,38 @@ def search_products(
 
     must_clauses = []
     should_clauses = []
-    filter_clauses = [] # Filter không dùng trong logic này nữa để linh hoạt hơn
+    filter_clauses = []
 
     # Tên sản phẩm luôn là điều kiện quan trọng
     must_clauses.append({"match": {"product_name": {"query": product_name, "boost": 2.0}}})
 
+    should_clauses.append({"match": {"specifications": product_name}})
     # GỢI Ý: Logic mới cân bằng hơn cho category
     if category:
         if strict_category:
-            # Khi xem thêm, BẮT BUỘC phải khớp category, nhưng dùng 'match' để linh hoạt
             must_clauses.append({"match": {"category": category}})
         else:
-            # Khi tìm lần đầu, category là yếu tố "nên có" để tăng điểm
             should_clauses.append({"match": {"category": category}})
 
+    # if properties:
+    #     if strict_properties:
+    #         must_clauses.append({"match": {"properties": { "query": properties, "operator": "and" }}})
+    #     else:
+    #         should_clauses.append({"match": {"properties": {"query": properties, "operator": "and", "boost": 2.0}}})
+
     if properties:
-        if strict_properties:
-            must_clauses.append({"match": {"properties": properties}})
-        else:
-            should_clauses.append({"match": {"properties": {"query": properties, "boost": 0.8}}})
+        filter_clauses.append({
+            "match": {
+                "properties": properties
+            }
+        })
 
     combined_query = {
         "query": {
             "bool": {
                 "must": must_clauses,
                 "should": should_clauses,
-                "filter": filter_clauses, # Sẽ rỗng, nhưng giữ lại cấu trúc
+                "filter": filter_clauses,
             }
         }
     }

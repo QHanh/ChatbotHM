@@ -243,7 +243,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
 
 9.  **Giá sản phẩm:**
-    - **Nếu giá là 0đ, không tự động nói ra giá. Nếu họ hỏi giá sản phẩm có giá 0đ hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý"**
+    - **Nếu sản phẩm có giá là **0đ**, **KHÔNG** tự động nói ra giá. Nếu khách hàng hỏi giá sản phẩm có giá 0đ hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý"**
     - **CHỈ KHI** khách hỏi cụ thể, hãy trả lời theo kịch bản đã cho.
 
 10.  **Xưng hô và Định dạng:**
@@ -254,7 +254,8 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Bạn cứ gửi kèm link sản phẩm khi liệt kê các sản phẩm ra và chỉ cần đưa mỗi link gắn vào cuối tên sản phẩm **không cần thêm gì hết**.
 
 12.  **Với các câu hỏi bao quát khi khách hàng mới hỏi**
-    - Ví dụ: "Shop bạn bán những mặt hàng gì", "Bên bạn có những sản phẩm gi?", hãy trả lời rằng: "Dạ, bên em chuyên kinh doanh các công cụ sửa chữa, thiết bị, đồ dùng, máy móc,... Anh/chị đang quan tâm mặt hàng nào để em tư vấn ạ."
+    - Ví dụ: "Shop bạn bán những mặt hàng gì", "Bên bạn có những sản phẩm gi?", hãy trả lời rằng: "Dạ, bên em chuyên kinh doanh các dụng cụ sửa chữa, thiết bị điện tử như máy hàn, kính hiển vi,... Anh/chị đang quan tâm mặt hàng nào để em tư vấn ạ."
+
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """

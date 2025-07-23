@@ -19,6 +19,10 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     QUAN TRỌNG: 
     - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
     - Nếu câu hỏi của khách hàng quá ngắn, là một lời chào, lời cảm ơn, hoặc không rõ ràng về sản phẩm (ví dụ: "ok", "thanks", "ho", "hi", "uk"), hãy đặt "needs_search" là "false".
+    - **Ưu tiên ý định thông tin:** Nếu khách hàng hỏi xin "ảnh", "thông số", thì `is_purchase_intent` PHẢI là `false`.
+    - **Ý định mua hàng (`is_purchase_intent`=true):** Chỉ xác định là mua hàng khi khách hàng dùng các từ dứt khoát như "chốt đơn", "lấy cho anh cái này", "đặt mua" và **KHÔNG** đi kèm với yêu cầu xin thông tin.
+    - Hãy trích xuất cả số lượng đặt hàng (`quantity`) nếu khách hàng đề cập. Nếu không nói gì, số lượng mặc định là 1.
+
     Lịch sử hội thoại gần đây:
     {history_text}
 
@@ -27,39 +31,45 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     Hãy phân tích và điền vào cấu trúc JSON sau:
     {{
       "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm để trả lời, ngược lại false>,
+      "is_purchase_intent": <true nếu khách muốn mua/chốt đơn>,
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
       "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", ngược lại false>,
       "search_params": {{
         "product_name": "<Tên sản phẩm khách hàng đang đề cập bao gồm luôn cả tên phụ kiện đi kèm>",
         "category": "<Danh mục sản phẩm. Quy tắc: Nếu khách hỏi 'đèn kính hiển vi', category là 'đèn'. Nếu khách hỏi 'kính hiển vi', category là 'kính hiển vi'. Nếu khách hỏi 'kính hiển vi 2 mắt', category là 'kính hiển vi 2 mắt'. Nếu không thể xác định, hãy để category giống product_name.>",
-        "properties": "<Các thuộc tính cụ thể như model, màu sắc...>"
+        "properties": "<Các thuộc tính cụ thể như model, màu sắc, loại, combo..., **chỉ giá trị thuộc tính, không thêm tiền tố**>",
+        "quantity": <Số lượng, mặc định là 1>
       }}
     }}
 
     Ví dụ:
     - Câu hỏi: "shop có đèn kính hiển vi không"
-      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": ""}}}}
-
-    - Câu hỏi: "shop có kính hiển vi không"
-      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "kính hiển vi", "category": "kính hiển vi", "properties": ""}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": "", "quantity": 1}}}}
 
     - Câu hỏi: "shop có kính hiển vi 2 mắt màu xanh không"
-      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh"}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh", "quantity": 1}}}}
   
     - Câu hỏi: "cho xem ảnh máy khò kaisi model 8512p"
-      JSON: {{"needs_search": true, "wants_images": true, "wants_specs": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P"}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, "wants_specs": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P", "quantity": 1}}}}
 
     - Câu hỏi: "có máy hàn dùng mũi C210 không"
-      JSON: {{"needs_search": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": ""}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": "", "quantity": 1}}}}
+
+    - Câu hỏi: "cho mình xin ảnh cái msdptop"
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, "wants_specs": false, "search_params": {{"product_name": "msdptop", "category": "Kính hiển vi", "properties": "", "quantity": 1}}}}
+    
+    - Câu hỏi: "cho chị loại M6T màu xanh nhé"
+      JSON: {{"needs_search": false, "is_purchase_intent": true, "wants_images": false, "wants_specs": false, "search_params": {{"product_name": "kính hiển vi M6T", "category": "kính hiển vi", "properties": "màu xanh", "quantity": 1 }}}}
 
     JSON của bạn:
     """
 
     fallback_response = {
         "needs_search": True,
-        "wants_images": "ảnh" in user_query.lower() or "hình" in user_query.lower(),
+        "is_purchase_intent": False,
+        "wants_images": "ảnh" in user_query.lower(),
         "wants_specs": "thông số" in user_query.lower(),
-        "search_params": { "product_name": user_query, "category": user_query, "properties": "" }
+        "search_params": { "product_name": user_query, "category": user_query, "properties": "", "quantity": 1 }
     }
 
     response_text = None
@@ -105,3 +115,26 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     except Exception as e:
         print(f"Lỗi trong quá trình phân tích ý định bằng LLM ({model_choice}): {e}")
         return fallback_response
+    
+def extract_customer_info(user_input: str, model_choice: str = "gemini") -> Dict:
+    """
+    Sử dụng LLM để bóc tách Tên, SĐT, Địa chỉ từ một chuỗi văn bản.
+    """
+    prompt = f"""
+    Bạn là một AI chuyên bóc tách thông tin. Từ đoạn văn bản dưới đây, hãy trích xuất Tên người (`name`), Số điện thoại (`phone`), và Địa chỉ (`address`) vào một đối tượng JSON.
+    Nếu không tìm thấy thông tin nào, hãy để giá trị là null. Chỉ trả về JSON.
+
+    Văn bản: "{user_input}"
+
+    JSON:
+    """
+    try:
+        model = get_gemini_model()
+        if model:
+            response = model.generate_content(prompt)
+            json_text = re.search(r'\{.*\}', response.text, re.DOTALL).group(0)
+            return json.loads(json_text)
+        return {}
+    except Exception as e:
+        print(f"Lỗi khi bóc tách thông tin khách hàng: {e}")
+        return {}
