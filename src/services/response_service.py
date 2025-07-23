@@ -132,7 +132,7 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
         if include_specs:
             product_context += f"  Mô tả: {first_item.get('specifications', 'N/A')}\n"
         
-        product_context += f"- Link sản phẩm: {first_item.get('link_product', 'N/A')}\n"
+        product_context += f"  Link sản phẩm: {first_item.get('link_product', 'N/A')}\n"
     return product_context
 
 
