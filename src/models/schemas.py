@@ -28,6 +28,8 @@ class ChatResponse(BaseModel):
     has_images: bool = False
     customer_info: Optional[CustomerInfo] = None
     has_purchase: bool = False
+    human_handover_required: bool = False,
+    has_negativity: bool = False
 
 class QueryExtraction(BaseModel):
     product_name: str

@@ -30,9 +30,21 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "offset": 0,
             "shown_product_keys": set(),
             "state": None, 
-            "pending_purchase_item": None
+            "pending_purchase_item": None,
+            "negativity_score": 0
         }).copy()
         history = session_data["messages"][-14:].copy()
+
+    if user_query.strip().lower() == "/bot":
+        session_data["state"] = None
+        session_data["negativity_score"] = 0
+        response_text = "Dạ, em có thể giúp gì tiếp cho anh/chị ạ?"
+        _update_chat_history(session_id, user_query, response_text, session_data)
+        return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
+    
+    if session_data.get("state") == "human_handover":
+        # response_text = "Dạ, nhân viên bên em đang vào ngay ạ, anh/chị vui lòng đợi trong giây lát."
+        return ChatResponse(reply="", history=history, human_handover_required=False)
 
     if session_data.get("state") == "awaiting_purchase_confirmation":
         affirmative_responses = ["đúng", "vâng", "ok", "đồng ý", "chốt", "uk", "uh", "ừ", "dạ", "um", "uhm", "ừm", "yes", "chuẩn", "vang", "da", "ừa"]
@@ -93,7 +105,35 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         )
 
     analysis_result = analyze_intent_and_extract_entities(user_query, history, model_choice)
+
+    if analysis_result.get("is_negative"):
+        session_data["negativity_score"] += 1
+        print(f"Thái độ tiêu cực được phát hiện. Điểm số hiện tại: {session_data['negativity_score']}")
+
+    if session_data["negativity_score"] >= 4:
+        response_text = "Dạ vâng ạ, anh/chị đợi chút, nhân viên bên em sẽ vào trả lời trực tiếp ngay ạ."
+        session_data["state"] = "human_handover"
+        _update_chat_history(session_id, user_query, response_text, session_data)
+        return ChatResponse(
+            reply=response_text,
+            history=chat_history[session_id]["messages"].copy(),
+            human_handover_required=True,
+            has_negativity=True
+        )
     
+    if analysis_result.get("wants_human_agent"):
+        response_text = "Dạ vâng ạ, anh/chị đợi chút, nhân viên bên em sẽ vào trả lời trực tiếp ngay ạ.\nNếu anh chị muốn tiếp tục chat với bot hãy chat lệnh '/bot' ạ."
+        session_data["state"] = "human_handover"
+        
+        _update_chat_history(session_id, user_query, response_text, session_data)
+        
+        return ChatResponse(
+            reply=response_text,
+            history=chat_history[session_id]["messages"].copy(),
+            human_handover_required=True,
+            has_negativity=False
+        )
+
     response_text, retrieved_data, product_images = "", [], []
     asking_for_more = is_asking_for_more(user_query)
 
@@ -152,7 +192,9 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         history=chat_history.get(session_id, {}).get("messages", []).copy(),
         images=images,
         has_images=len(images) > 0,
-        has_purchase=analysis_result.get("is_purchase_intent", False)
+        has_purchase=analysis_result.get("is_purchase_intent", False),
+        human_handover_required=analysis_result.get("human_handover_required", False),
+        has_negativity=False
     )
 
 def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
@@ -237,6 +279,7 @@ def _update_chat_history(session_id: str, user_query: str, response_text: str, s
         current_session["shown_product_keys"] = session_data.get("shown_product_keys", set())
         current_session["state"] = session_data.get("state")
         current_session["pending_purchase_item"] = session_data.get("pending_purchase_item")
+        current_session["negativity_score"] = session_data.get("negativity_score", 0)
 
         chat_history[session_id] = current_session
 
