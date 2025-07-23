@@ -146,6 +146,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
         image_instruction = f"""## HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH ##
 - Khi khách muốn xem ảnh, câu trả lời PHẢI có 2 phần: [ANSWER] và [PRODUCT_IMAGE].
 - **Phần [ANSWER]:**
+    - **KHÔNG** thêm bất kỳ lời chào hay câu giới thiệu nào.
     - **Chỉ liệt kê** lại các sản phẩm mà khách muốn xem ảnh.
     - **Mỗi sản phẩm phải nằm trên một dòng riêng**, **không được** cách dòng quá 1 dòng, bắt đầu bằng dấu gạch ngang (-).
     - Ghi rõ Tên và Giá của sản phẩm.
@@ -169,10 +170,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - Hotline: 0982153333"""
 
     greeting_rule = ""
-    if not has_history:
-        greeting_rule = '- **Chào hỏi:** Bắt đầu câu trả lời bằng lời chào đầy đủ "Dạ, em chào anh/chị ạ." vì đây là tin nhắn đầu tiên.'
-    else:
-        greeting_rule = '- **Chào hỏi:** KHÔNG chào hỏi đầy đủ. Bắt đầu câu trả lời trực tiếp bằng "Dạ,".'
+    
+    if not wants_images:
+        if not has_history:
+            greeting_rule = '- **Chào hỏi:** Bắt đầu câu trả lời bằng lời chào đầy đủ "Dạ, em chào anh/chị ạ." vì đây là tin nhắn đầu tiên.'
+        else:
+            greeting_rule = '- **Chào hỏi:** KHÔNG chào hỏi đầy đủ. Bắt đầu câu trả lời trực tiếp bằng "Dạ,".'
 
     if not needs_product_search:
         return f"""## BỐI CẢNH ##
