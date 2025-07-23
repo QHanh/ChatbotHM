@@ -146,8 +146,8 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
         image_instruction = f"""## HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH ##
 - Khi khách muốn xem ảnh, câu trả lời PHẢI có 2 phần: [ANSWER] và [PRODUCT_IMAGE].
 - **Phần [ANSWER]:**
-    - Liệt kê lại các sản phẩm mà khách muốn xem ảnh.
-    - **Mỗi sản phẩm phải nằm trên một dòng riêng**, bắt đầu bằng dấu gạch ngang (-).
+    - **Chỉ liệt kê** lại các sản phẩm mà khách muốn xem ảnh.
+    - **Mỗi sản phẩm phải nằm trên một dòng riêng**, **không được** cách dòng quá 1 dòng, bắt đầu bằng dấu gạch ngang (-).
     - Ghi rõ Tên và Giá của sản phẩm.
     - **VÍ DỤ ĐỊNH DẠNG PHẦN ANSWER:**
         - Máy hàn OSSTEAM T210 - giá 145,000đ

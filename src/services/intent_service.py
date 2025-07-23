@@ -33,7 +33,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     Hãy phân tích và điền vào cấu trúc JSON sau:
     {{
       "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm để trả lời, ngược lại false>,
-      "is_purchase_intent": <true nếu khách muốn mua/chốt đơn>,
+      "is_purchase_intent": <true nếu khách muốn mua/chốt đơn, ví dụ: "cho mình loại này", "chốt đơn", "lấy cho mình cái này", ngược lại false>,
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
       "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", ngược lại false>,
       "wants_human_agent": <true nếu khách muốn gặp người thật, ngược lại false>,
@@ -41,7 +41,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
       "search_params": {{
         "product_name": "<Tên sản phẩm khách hàng đang đề cập bao gồm luôn cả tên thương hiệu và tên phụ kiện đi kèm>",
         "category": "<Danh mục sản phẩm. Quy tắc: Nếu khách hỏi 'đèn kính hiển vi', category là 'đèn'. Nếu khách hỏi 'kính hiển vi', category là 'kính hiển vi'. Nếu khách hỏi 'kính hiển vi 2 mắt', category là 'kính hiển vi 2 mắt'. Nếu không thể xác định, hãy để category giống product_name.>",
-        "properties": "<Các thuộc tính cụ thể như model, màu sắc, loại, combo..., **chỉ giá trị thuộc tính, không thêm tiền tố. Lưu ý: Tên thương hiệu không phải thuộc tính, ví dụ: máy hàn GVM thì properties là '' (không có thuộc tính)**>",
+        "properties": "<Các thuộc tính cụ thể như model, màu sắc, loại, combo..., **chỉ giá trị thuộc tính, không thêm tiền tố**. Lưu ý: Tên thương hiệu không phải thuộc tính, ví dụ: máy hàn GVM T210S, GVM H3 thì properties là (**không có thuộc tính**). Thuộc tính **chỉ có** khi khách đề cập rõ màu sắc, MODEL, hoặc loại cụ thể.>",
         "quantity": <Số lượng, mặc định là 1>
       }}
     }}
@@ -59,14 +59,11 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - Câu hỏi: "có máy hàn dùng mũi C210 không"
       JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": "", "quantity": 1}}}}
 
-    - Câu hỏi: "cho mình xin ảnh cái msdptop"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "msdptop", "category": "Kính hiển vi", "properties": "", "quantity": 1}}}}
+    - Câu hỏi: "cho mình xin ảnh cái máy hàn GVM T210S và máy hàn GVM H3"
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn GVM T210s H3", "category": "máy hàn", "properties": "", "quantity": 1}}}}
     
     - Câu hỏi: "cho chị loại M6T màu xanh nhé"
       JSON: {{"needs_search": false, "is_purchase_intent": true, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi M6T", "category": "kính hiển vi", "properties": "màu xanh", "quantity": 1 }}}}
-
-    - Câu hỏi: "cho mình gặp nhân viên tư vấn"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": true, "is_negative": false, "search_params": {{...}} }}
 
     - Câu hỏi: "cho tôi gặp anh Hoàng"
       JSON: {{"needs_search": false, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": true, "is_negative": false, "search_params": {{...}} }}

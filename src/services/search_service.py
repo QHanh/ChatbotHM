@@ -31,18 +31,18 @@ def search_products(
         else:
             should_clauses.append({"match": {"category": category}})
 
-    # if properties:
-    #     if strict_properties:
-    #         must_clauses.append({"match": {"properties": { "query": properties, "operator": "and" }}})
-    #     else:
-    #         should_clauses.append({"match": {"properties": {"query": properties, "operator": "and", "boost": 2.0}}})
-
     if properties:
-        filter_clauses.append({
-            "match": {
-                "properties": properties
-            }
-        })
+        if strict_properties:
+            must_clauses.append({"match": {"properties": { "query": properties, "operator": "and" }}})
+        else:
+            should_clauses.append({"match": {"properties": {"query": properties, "operator": "and", "boost": 1.0}}})
+
+    # if properties:
+    #     filter_clauses.append({
+    #         "match": {
+    #             "properties": properties
+    #         }
+    #     })
 
     combined_query = {
         "query": {

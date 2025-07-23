@@ -228,7 +228,7 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         response_text = result["answer"]
         product_images = result["product_images"]
         if response_text and product_images:
-            response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:" + response_text
+            response_text = response_text
     else:
         response_text = result
 
@@ -260,7 +260,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
         response_text = result["answer"]
         product_images = result["product_images"]
         if response_text and product_images:
-            response_text = "Dạ, đây là hình ảnh các sản phẩm em gửi anh/chị tham khảo ạ:" + response_text
+            response_text = response_text
     else:
         response_text = result
 
