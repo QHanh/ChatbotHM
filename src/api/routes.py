@@ -142,12 +142,14 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         response_text = "Dạ vâng, anh/chị muốn mua thêm sản phẩm nào ạ?"
         session_data["last_query"] = None
 
-    if analysis_result.get("is_purchase_intent"):
+    elif analysis_result.get("is_purchase_intent"):
         search_params = analysis_result["search_params"]
         requested_quantity = search_params.get("quantity", 1)
 
+        last_query = session_data.get("last_query") or {}
+
         products = search_products(
-            product_name=search_params.get("product_name") or session_data.get("last_query", {}).get("product_name", ""),
+            product_name=search_params.get("product_name") or last_query.get("product_name", ""),
             category=search_params.get("category") or session_data.get("last_query", {}).get("category", ""),
             properties=search_params.get("properties") or session_data.get("last_query", {}).get("properties", ""),
             # strict_properties=True

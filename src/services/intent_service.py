@@ -25,6 +25,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - **Ý định gặp người thật:** Nếu khách hàng muốn nói chuyện với nhân viên, người thật (ví dụ: "gặp nhân viên", "nói chuyện với người", "tư vấn trực tiếp", "cho tôi nói chuyện với anh Hoàng hoặc chị Mai"), hãy đặt `wants_human_agent` là `true`.
     - **Phân tích thái độ:** Nếu khách hàng thể hiện sự bực bội, chê bai, phàn nàn, hoặc dùng từ ngữ tiêu cực, hãy đặt `is_negative` là `true`.
     - **Ý định thêm đơn hàng:** Nếu khách hàng muốn mua thêm, thêm đơn, bổ sung đơn, hãy đặt `is_add_to_order_intent` là `true` và đặt `is_purchase_intent` là `false`.
+    - **Quy tắc ưu tiên:** `is_add_to_order_intent` và `is_purchase_intent` không thể cùng là `true`. `is_add_to_order_intent` chỉ đúng cho các câu hỏi ban đầu như "mua thêm", "bổ sung đơn". Khi khách hàng đã chỉ định một sản phẩm cụ thể để mua, `is_purchase_intent` sẽ là `true` và `is_add_to_order_intent` phải là `false`.
     
     Lịch sử hội thoại gần đây:
     {history_text}
