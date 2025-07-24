@@ -20,10 +20,11 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
     - Nếu câu hỏi của khách hàng quá ngắn, là một lời chào, lời cảm ơn, hoặc không rõ ràng về sản phẩm (ví dụ: "ok", "thanks", "ho", "hi", "uk"), hãy đặt "needs_search" là "false".
     - **Ưu tiên ý định thông tin:** Nếu khách hàng hỏi xin "ảnh", "thông số", thì `is_purchase_intent` PHẢI là `false`.
-    - **Ý định mua hàng (`is_purchase_intent`=true):** Chỉ xác định là mua hàng khi khách hàng dùng các từ dứt khoát như "chốt đơn", "lấy cho anh cái này", "đặt mua" và **KHÔNG** đi kèm với yêu cầu xin thông tin.
+    - **Ý định mua hàng (`is_purchase_intent`=true):** Chỉ xác định là mua hàng khi khách hàng dùng các từ dứt khoát như "chốt đơn", "lấy cho anh cái này", "đặt mua" và **KHÔNG** đi kèm với yêu cầu xin thông tin. Nếu không nói gì, số lượng mặc định là 1. Khách hàng muốn **hỏi giá hay báo giá** thì is_purchase_intent là `false`.
     - Hãy trích xuất cả số lượng đặt hàng (`quantity`) nếu khách hàng đề cập. Nếu không nói gì, số lượng mặc định là 1.
     - **Ý định gặp người thật:** Nếu khách hàng muốn nói chuyện với nhân viên, người thật (ví dụ: "gặp nhân viên", "nói chuyện với người", "tư vấn trực tiếp", "cho tôi nói chuyện với anh Hoàng hoặc chị Mai"), hãy đặt `wants_human_agent` là `true`.
     - **Phân tích thái độ:** Nếu khách hàng thể hiện sự bực bội, chê bai, phàn nàn, hoặc dùng từ ngữ tiêu cực, hãy đặt `is_negative` là `true`.
+    - **Ý định thêm đơn hàng:** Nếu khách hàng muốn mua thêm, thêm đơn, bổ sung đơn, hãy đặt `is_add_to_order_intent` là `true` và đặt `is_purchase_intent` là `false`.
     
     Lịch sử hội thoại gần đây:
     {history_text}
@@ -34,6 +35,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     {{
       "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm để trả lời, ngược lại false>,
       "is_purchase_intent": <true nếu khách muốn mua/chốt đơn, ví dụ: "cho mình loại này", "chốt đơn", "lấy cho mình cái này", ngược lại false>,
+      "is_add_to_order_intent": <true nếu khách muốn mua thêm/thêm đơn, ngược lại false>,
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
       "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", ngược lại false>,
       "wants_human_agent": <true nếu khách muốn gặp người thật, ngược lại false>,
@@ -48,35 +50,39 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
 
     Ví dụ:
     - Câu hỏi: "shop có đèn kính hiển vi không"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": "", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": "", "quantity": 1}}}}
 
     - Câu hỏi: "shop có kính hiển vi 2 mắt màu xanh không"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh", "quantity": 1}}}}
   
     - Câu hỏi: "cho xem ảnh máy khò kaisi model 8512p"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P", "quantity": 1}}}}
 
     - Câu hỏi: "có máy hàn dùng mũi C210 không"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": "", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": "", "quantity": 1}}}}
 
     - Câu hỏi: "cho mình xin ảnh cái máy hàn GVM T210S và máy hàn GVM H3"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn GVM T210s H3", "category": "máy hàn", "properties": "", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn GVM T210s H3", "category": "máy hàn", "properties": "", "quantity": 1}}}}
     
     - Câu hỏi: "cho chị loại M6T màu xanh nhé"
-      JSON: {{"needs_search": false, "is_purchase_intent": true, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi M6T", "category": "kính hiển vi", "properties": "màu xanh", "quantity": 1 }}}}
+      JSON: {{"needs_search": false, "is_purchase_intent": true, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi M6T", "category": "kính hiển vi", "properties": "màu xanh", "quantity": 1 }}}}
 
     - Câu hỏi: "cho tôi gặp anh Hoàng"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": true, "is_negative": false, "search_params": {{...}} }}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": true, "is_negative": false, "search_params": {{...}} }}
 
     - Câu hỏi: "bot trả lời ngu thế"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": true, "search_params": {{...}} }}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": true, "search_params": {{...}} }}
 
+    - Câu hỏi: "tôi muốn thêm đơn", "tôi muốn mua thêm", "tôi muốn bổ sung đơn hàng"
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": true, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{...}} }}
+ 
     JSON của bạn:
     """
 
     fallback_response = {
         "needs_search": True,
         "is_purchase_intent": False,
+        "is_add_to_order_intent": False,
         "wants_images": "ảnh" in user_query.lower(),
         "wants_specs": "thông số" in user_query.lower(),
         "wants_human_agent": False,

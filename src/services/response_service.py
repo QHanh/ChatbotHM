@@ -101,38 +101,35 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
     product_context = "Dữ liệu sản phẩm tìm thấy:\n"
     # Bước 2: Tạo chuỗi context từ dữ liệu đã được nhóm
     for name, items in product_groups.items():
-        first_item = items[0]
         product_context += f"- Tên: {name}\n"
-        
-        # Nếu có nhiều hơn 1 item trong nhóm, nghĩa là có nhiều phiên bản/màu sắc
-        if len(items) > 1:
-            properties_list = [
-                str(item.get('properties', '')) 
-                for item in items 
-                if item.get('properties') and str(item.get('properties')).strip() != '0'
-            ]
-            unique_properties = sorted(list(set(properties_list)))
-            if unique_properties:
-                product_context += f"  Lưu ý: Sản phẩm này có các thuộc tính khác nhau (ví dụ: cỡ, model, màu sắc,...): {', '.join(unique_properties)}\n"
-        else:
-            # Nếu chỉ có 1, hiển thị thuộc tính của nó
-            prop = first_item.get('properties')
+
+        # Sắp xếp các phiên bản để đảm bảo thứ tự nhất quán
+        sorted_items = sorted(items, key=lambda x: x.get('properties', ''))
+
+        # Nếu chỉ có một phiên bản, hiển thị trực tiếp
+        if len(sorted_items) == 1:
+            item = sorted_items[0]
+            prop = item.get('properties')
             if prop and str(prop).strip() != '0':
                 product_context += f"  Thuộc tính: {prop}\n"
-
-        # Lấy thông tin chung từ sản phẩm đầu tiên trong nhóm
-        price = first_item.get('lifecare_price', 0)
-        if price > 0:
-            product_context += f"  Giá: {price:,.0f}đ\n"
+            
+            price = item.get('lifecare_price', 0)
+            price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
+            product_context += f"  Giá: {price_str}\n"
+            product_context += f"  Tồn kho: {item.get('inventory', 0)}\n"
         else:
-            product_context += "  Giá: 0đ\n"
+            # Nếu có nhiều phiên bản, liệt kê chi tiết từng phiên bản
+            product_context += "  Lưu ý: Sản phẩm này có nhiều thuộc tính khác nhau (ví dụ: loại, cỡ, model, màu,...). Các phiên bản có sẵn:\n"
+            for item in sorted_items:
+                prop = item.get('properties', 'N/A')
+                price = item.get('lifecare_price', 0)
+                inventory = item.get('inventory', 0)
+                price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
+                product_context += f"    + Loại: {prop} | Giá: {price_str} | Tồn kho: {inventory}\n"
 
-        product_context += f"  Tồn kho: {first_item.get('inventory', 0)}\n"
-
+        # Thêm mô tả chung (nếu cần) từ sản phẩm đầu tiên
         if include_specs:
-            product_context += f"  Mô tả: {first_item.get('specifications', 'N/A')}\n"
-        
-        product_context += f"  Link sản phẩm: {first_item.get('link_product', 'N/A')}\n"
+            product_context += f"  Mô tả: {sorted_items[0].get('specifications', 'N/A')}\n"
     return product_context
 
 
@@ -240,14 +237,14 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - **KHÔNG** được gộp tất cả các tên sản phẩm vào trong một đoạn văn.
 
 7.  **Xem thêm / Loại khác:**
-    - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?". Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
+    - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?" hoặc có thể là "tiếp đi" (tùy vào ngữ cảnh cuộc trò chuyện). Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
 
 8.  **Tồn kho:**
     - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
 
 9.  **Giá sản phẩm:**
-    - **Nếu sản phẩm có giá là **0đ**, **KHÔNG** tự động nói ra giá. Nếu khách hàng hỏi giá sản phẩm có giá 0đ hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý"**
-    - **CHỈ KHI** khách hỏi cụ thể, hãy trả lời theo kịch bản đã cho.
+    - **Nếu sản phẩm có giá là **Liên hệ**, **KHÔNG ĐƯỢC** tự động nói ra giá.
+    - Nếu khách hàng hỏi giá sản phẩm có giá "Liên hệ" hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý".
 
 10.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".
@@ -259,6 +256,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 12.  **Với các câu hỏi bao quát khi khách hàng mới hỏi**
     - Ví dụ: "Shop bạn bán những mặt hàng gì", "Bên bạn có những sản phẩm gi?", hãy trả lời rằng: "Dạ, bên em chuyên kinh doanh các dụng cụ sửa chữa, thiết bị điện tử như máy hàn, kính hiển vi,... Anh/chị đang quan tâm mặt hàng nào để em tư vấn ạ."
 
+13.  **Xử lý lời đồng ý:**
+    - Nếu bot ở lượt trước vừa hỏi một câu hỏi Yes/No để đề nghị cung cấp thông tin (ví dụ: "Anh/chị có muốn xem chi tiết không?") và câu hỏi mới nhất của khách là một lời đồng ý (ví dụ: "có", "vâng", "ok"), HÃY thực hiện hành động đã đề nghị.
+    - Trong trường hợp này, hãy liệt kê các sản phẩm có trong "DỮ LIỆU CUNG CẤP" theo đúng định dạng danh sách.
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """

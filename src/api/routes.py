@@ -137,6 +137,11 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     response_text, retrieved_data, product_images = "", [], []
     asking_for_more = is_asking_for_more(user_query)
 
+    # GỢI Ý: Thêm luồng xử lý mới cho ý định "thêm đơn hàng", đặt trước các luồng khác.
+    if analysis_result.get("is_add_to_order_intent"):
+        response_text = "Dạ vâng, anh/chị muốn mua thêm sản phẩm nào ạ?"
+        session_data["last_query"] = None
+
     if analysis_result.get("is_purchase_intent"):
         search_params = analysis_result["search_params"]
         requested_quantity = search_params.get("quantity", 1)
@@ -155,7 +160,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             
             full_name = product_name
             if properties and str(properties).strip() not in ['0', '']:
-                full_name = f"{product_name} ({properties})"
+                full_name = f"{product_name}"
             
             if available_stock == 0:
                 response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em hiện đang hết hàng ạ."
@@ -242,13 +247,22 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
 
     if analysis["needs_search"]:
         search_params = analysis["search_params"]
+        last_query = session_data.get("last_query", {})
+        product_name_to_search = search_params.get("product_name", user_query)
+        if not product_name_to_search or product_name_to_search == user_query:
+            product_name_to_search = last_query.get("product_name", product_name_to_search)
+       
         retrieved_data = search_products(
-            product_name=search_params.get("product_name", user_query),
+            product_name=product_name_to_search,
             category=search_params.get("category", user_query),
             properties=search_params.get("properties", None),
             offset=0
         )
-        session_data["last_query"] = search_params
+        session_data["last_query"] = {
+            "product_name": product_name_to_search,
+            "category": search_params.get("category", user_query),
+            "properties": search_params.get("properties", None)
+        }
         session_data["offset"] = 0
         session_data["shown_product_keys"] = {_get_product_key(p) for p in retrieved_data}
 
