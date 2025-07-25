@@ -34,7 +34,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
 
     Hãy phân tích và điền vào cấu trúc JSON sau:
     {{
-      "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm để trả lời, ngược lại false>,
+      "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm gồm cả giá để trả lời, ngược lại false>,
       "is_purchase_intent": <true nếu khách muốn mua/chốt đơn, ví dụ: "cho mình loại này", "chốt đơn", "lấy cho mình cái này", ngược lại false>,
       "is_add_to_order_intent": <true nếu khách muốn mua thêm/thêm đơn, ngược lại false>,
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,

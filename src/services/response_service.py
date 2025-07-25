@@ -12,7 +12,8 @@ def generate_llm_response(
     include_specs: bool = False,
     model_choice: str = "gemini",
     needs_product_search: bool = True,
-    wants_images: bool = False
+    wants_images: bool = False,
+    is_image_search: bool = False
 ) -> str:
     """
     Tạo prompt và gọi đến LLM để sinh câu trả lời.
@@ -46,7 +47,7 @@ def generate_llm_response(
         for p in search_results if p.get('product_name')
     ] if wants_images else []
 
-    prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos, has_history)
+    prompt = _build_prompt(user_query, context, needs_product_search, wants_images, product_infos, has_history, is_image_search)
 
     print("--- PROMPT GỬI ĐẾN LLM ---")
     print(prompt)
@@ -134,7 +135,7 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
     return product_context
 
 
-def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None, has_history: bool = None) -> str:
+def _build_prompt(user_query: str, context: str, needs_product_search: bool, wants_images: bool = False, product_infos: list = None, has_history: bool = None, is_image_search: bool = False) -> str:
     """
     Xây dựng prompt cho LLM với các quy tắc hội thoại nâng cao.
     """
@@ -174,6 +175,15 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
             greeting_rule = '- **Chào hỏi:** Bắt đầu câu trả lời bằng lời chào đầy đủ "Dạ, em chào anh/chị ạ." vì đây là tin nhắn đầu tiên.'
         else:
             greeting_rule = '- **Chào hỏi:** KHÔNG chào hỏi đầy đủ. Bắt đầu câu trả lời trực tiếp bằng "Dạ,".'
+
+    image_search_priority_rule = ""
+    if is_image_search:
+        image_search_priority_rule = """
+**QUY TẮC ƯU TIÊN TUYỆT ĐỐI (TÌM KIẾM BẰNG HÌNH ẢNH):**
+- Cuộc trò chuyện này bắt đầu bằng việc khách hàng gửi một hình ảnh để tìm kiếm.
+- Nhiệm vụ của bạn là trả lời câu hỏi của khách hàng DỰA HOÀN TOÀN vào "DỮ LIỆU SẢN PHẨM TÌM THẤY".
+- **TUYỆT ĐỐI BỎ QUA** lịch sử trò chuyện cũ và không được liệt kê các sản phẩm khác không có trong dữ liệu tìm thấy.
+"""
 
     if not needs_product_search:
         return f"""## BỐI CẢNH ##
@@ -216,6 +226,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 {image_instruction}
 
 ## QUY TẮC HỘI THOẠI BẮT BUỘC ##
+
+{image_search_priority_rule}
+
 1.  {greeting_rule}
 
 2.  **Thông tin cửa hàng:**
@@ -226,7 +239,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính.
 
 4.  **Sản phẩm có nhiều model, combo, cỡ, màu sắc,... (tùy thuộc tính):**
-    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và hãy thông báo có nhiều màu hoặc có nhiều model hoặc có nhiều cỡ,... (tùy vào thuộc tính của sản phẩm). Sau đó ở cuối có thể hỏi khách có muốn xem chi tiết không?
+    - Khi giới thiệu lần đầu, chỉ nói tên sản phẩm chính và hãy thông báo có nhiều màu hoặc có nhiều model hoặc có nhiều cỡ,... (tùy vào thuộc tính của sản phẩm).
     - **Khi khách hỏi trực tiếp về số lượng** (ví dụ: "chỉ có 3 màu thôi à?"), bạn phải trả lời thẳng vào câu hỏi.
 
 5.  **Xử lý câu hỏi chung về danh mục:**
@@ -245,8 +258,8 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
 
 9.  **Giá sản phẩm:**
-    - **Nếu sản phẩm có giá là **Liên hệ** thì **KHÔNG ĐƯỢC** tự động nói ra giá "Liên hệ".
-    - Nếu khách hàng hỏi giá của sản phẩm có giá "Liên hệ" hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý".
+    - **Các sản phẩm có giá là **Liên hệ** thì **KHÔNG ĐƯỢC** nói ra giá.
+    - **CHỈ KHI** khách hàng hỏi giá của sản phẩm có giá "Liên hệ" thì hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý".
 
 10.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".

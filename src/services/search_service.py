@@ -20,11 +20,9 @@ def search_products(
     should_clauses = []
     filter_clauses = []
 
-    # Tên sản phẩm luôn là điều kiện quan trọng
     must_clauses.append({"match": {"product_name": {"query": product_name, "boost": 2.0}}})
 
     should_clauses.append({"match": {"specifications": product_name}})
-    # GỢI Ý: Logic mới cân bằng hơn cho category
     if category:
         if strict_category:
             must_clauses.append({"match": {"category": category}})
@@ -68,10 +66,11 @@ def search_products(
         print(f"Lỗi khi tìm kiếm: {e}")
         return []
     
-def search_products_by_image(image_embedding: list, top_k: int = 1) -> list:
+def search_products_by_image(image_embedding: list, top_k: int = 1, min_similarity: float = 0.9) -> list:
     """
     Thực hiện tìm kiếm k-Nearest Neighbor (kNN) trong Elasticsearch
     để tìm các sản phẩm có ảnh tương đồng nhất.
+    Chỉ trả về kết quả nếu độ tương đồng cao hơn một ngưỡng nhất định.
     """
     if not image_embedding:
         return []
@@ -87,6 +86,7 @@ def search_products_by_image(image_embedding: list, top_k: int = 1) -> list:
         response = es_client.search(
             index=INDEX_NAME,
             knn=knn_query,
+            min_score=min_similarity, # GỢI Ý: Thêm ngưỡng điểm số tối thiểu
             size=top_k,
             _source_includes=[ 
                 "product_name", "category", "properties", "lifecare_price",
@@ -94,7 +94,7 @@ def search_products_by_image(image_embedding: list, top_k: int = 1) -> list:
             ]
         )
         hits = [hit['_source'] for hit in response['hits']['hits']]
-        print(f"Tìm thấy {len(hits)} sản phẩm tương đồng bằng hình ảnh.")
+        print(f"Tìm thấy {len(hits)} sản phẩm tương đồng (ngưỡng > {min_similarity}).")
         return hits
     except Exception as e:
         print(f"Lỗi khi tìm kiếm bằng vector: {e}")

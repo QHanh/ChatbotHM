@@ -43,6 +43,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "handover_timestamp": None
         }).copy()
         history = session_data["messages"][-14:].copy()
+
     API_ENDPOINT = "http://localhost:8000/embed"
     if image_url:
         print(f"Phát hiện hình ảnh từ URL: {image_url}, bắt đầu xử lý...")
@@ -59,25 +60,29 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             else:
                 print(" -> Lỗi từ API:", result.get("error", "Không rõ lỗi"))
 
-            # 4. Tìm kiếm các sản phẩm tương đồng
             retrieved_data = search_products_by_image(embedding_vector)
+            if not retrieved_data:
+                response_text="Dạ, cửa hàng em không có sản phẩm này ạ."
+                _update_chat_history(session_id, user_query, response_text, session_data)
+                return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
             
             if not user_query:
-                user_query = "Tìm sản phẩm tương tự trong ảnh"
+                user_query = "Ảnh này là sản phẩm gì vậy shop?"
 
             response_text = generate_llm_response(
                 user_query=user_query,
                 search_results=retrieved_data,
                 history=history,
-                model_choice=model_choice
+                model_choice=model_choice,
+                is_image_search=True
             )
             
             _update_chat_history(session_id, user_query, response_text, session_data)
-            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
+            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
 
         except Exception as e:
             print(f"Lỗi nghiêm trọng trong luồng xử lý ảnh: {e}")
-            return ChatResponse(reply="Dạ, em xin lỗi, đã có lỗi xảy ra khi xử lý hình ảnh của mình ạ.", history=history)
+            return ChatResponse(reply="Dạ, em xin lỗi, đã có lỗi xảy ra khi xem hình ảnh của mình ạ.", history=history)
 
     if user_query.strip().lower() == "/bot":
         session_data["state"] = None
@@ -200,7 +205,6 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             product_to_check = evaluation.get("product")
 
             if request_type == "SPECIFIC" and product_to_check:
-                # Nếu yêu cầu là cụ thể, tiếp tục quy trình kiểm tra kho
                 requested_quantity = search_params.get("quantity", 1)
                 available_stock = product_to_check.get("inventory", 0)
                 product_name = product_to_check.get("product_name")
