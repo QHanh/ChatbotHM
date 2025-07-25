@@ -43,27 +43,24 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "handover_timestamp": None
         }).copy()
         history = session_data["messages"][-14:].copy()
-
+    API_ENDPOINT = "http://localhost:8000/embed"
     if image_url:
         print(f"Phát hiện hình ảnh từ URL: {image_url}, bắt đầu xử lý...")
         try:
             # 1. Tải ảnh từ URL
-            response = requests.get(image_url, timeout=15)
+            response = requests.post(API_ENDPOINT, data={"image_url": image_url}, timeout=15)
             response.raise_for_status()
-            
-            # 2. Đọc dữ liệu ảnh
-            img = Image.open(io.BytesIO(response.content))
+            result = response.json()
 
-            # 3. Tạo embedding cho ảnh
-            embedding_result = genai.embed_content(
-                model="models/embedding-001",
-                content=img,
-                task_type="retrieval_query"
-            )
-            image_embedding = embedding_result['embedding']
+            # Kiểm tra có lỗi không
+            if "embedding" in result:
+                embedding_vector = result["embedding"]
+                print(" -> Tạo embedding cho ảnh thành công.")
+            else:
+                print(" -> Lỗi từ API:", result.get("error", "Không rõ lỗi"))
 
             # 4. Tìm kiếm các sản phẩm tương đồng
-            retrieved_data = search_products_by_image(image_embedding)
+            retrieved_data = search_products_by_image(embedding_vector)
             
             if not user_query:
                 user_query = "Tìm sản phẩm tương tự trong ảnh"
@@ -75,7 +72,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                 model_choice=model_choice
             )
             
-            _update_chat_history(session_id, user_query, response_text, retrieved_data, session_data)
+            _update_chat_history(session_id, user_query, response_text, session_data)
             return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
 
         except Exception as e:
@@ -231,7 +228,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                     "Anh/chị đang quan tâm đến loại cụ thể nào ạ?"
                 )
                 retrieved_data = products
-            else: # Type is NONE or something else
+            else:
                 response_text = f"Dạ, em xin lỗi, bên em không có sản phẩm này của mình ạ."
 
     elif asking_for_more and session_data.get("last_query"):
