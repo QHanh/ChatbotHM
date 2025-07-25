@@ -12,3 +12,5 @@ openai
 
 # Thư viện cho LM Studio API
 python-dotenv
+pillow
+pandas
