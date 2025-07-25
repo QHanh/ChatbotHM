@@ -10,7 +10,6 @@ dulieu_*.xlsx
 # Cache của Python
 __pycache__/
 **/__pycache__/
-__pycache__/
 *.pyc
 
 # VSCode workspace settings
