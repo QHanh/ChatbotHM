@@ -1,6 +1,7 @@
+import json
 import re
 from collections import defaultdict
-from typing import List, Dict
+from typing import List, Dict, Optional
 from src.services.llm_service import get_gemini_model, get_lmstudio_response, get_openai_model
 from src.utils.helpers import is_general_query, format_history_text
 
@@ -240,11 +241,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?" hoặc có thể là "tiếp đi" (tùy vào ngữ cảnh cuộc trò chuyện). Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
 
 8.  **Tồn kho:**
+    - **KHÔNG** tự động nói ra tồn kho.
     - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
 
 9.  **Giá sản phẩm:**
-    - **Nếu sản phẩm có giá là **Liên hệ**, **KHÔNG ĐƯỢC** tự động nói ra giá.
-    - Nếu khách hàng hỏi giá sản phẩm có giá "Liên hệ" hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý".
+    - **Nếu sản phẩm có giá là **Liên hệ** thì **KHÔNG ĐƯỢC** tự động nói ra giá "Liên hệ".
+    - Nếu khách hàng hỏi giá của sản phẩm có giá "Liên hệ" hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý".
 
 10.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".
@@ -311,3 +313,64 @@ def _get_fallback_response(search_results: List[Dict], needs_product_search: boo
         )
     else:
         return "Dạ, em xin lỗi, em không hiểu rõ câu hỏi của anh/chị. Anh/chị có thể hỏi lại không ạ?"
+    
+def evaluate_and_choose_product(user_query: str, history_text: str, product_candidates: List[Dict], model_choice: str = "gemini") -> Dict:
+    """
+    Sử dụng một lệnh gọi AI duy nhất để vừa đánh giá độ cụ thể của yêu cầu,
+    vừa chọn ra sản phẩm phù hợp nhất nếu có thể.
+    Trả về một dictionary: {'type': 'GENERAL'/'SPECIFIC'/'NONE', 'product': product_dict/None}
+    """
+    if not product_candidates:
+        return {'type': 'NONE', 'product': None}
+
+    prompt_list = ""
+    for i, product in enumerate(product_candidates):
+        name = product.get("product_name", "")
+        props = product.get("properties", "")
+        full_name = f"{name} ({props})" if props and str(props) != '0' else name
+        prompt_list += f"{i}: {full_name}\n"
+
+    prompt = f"""
+    Bạn là một AI chuyên phân tích và chọn lựa sản phẩm. Dựa vào lịch sử hội thoại, yêu cầu mua của khách hàng và danh sách sản phẩm, hãy thực hiện 2 nhiệm vụ sau:
+    1.  Đánh giá xem yêu cầu của khách là "GENERAL" (hỏi chung chung về một loại) hay "SPECIFIC" (chỉ đến một sản phẩm cụ thể).
+    2.  Nếu yêu cầu là "SPECIFIC", hãy chọn ra sản phẩm phù hợp nhất.
+
+    Lưu ý:
+    - Bạn sẽ trả về "GENERAL" nếu thấy ngữ cảnh lịch sử chat và yêu cầu của khách chưa đủ để phân biệt được sản phẩm cụ thể trong danh sách sản phẩm để chọn bên dưới. 
+      Ví dụ: khách hỏi "bán cho mình chiếc kính hiển vi 2 mắt" và trong lịch sử chat cũng không thấy khách đang đề cập rõ đến loại hay brand nào, nhưng trong danh sách sản phẩm để chọn lại có 2 loại brand kính hiển vi 2 mắt khác nhau, cho nên chưa xác định được sản phẩm cụ thể nào được chọn.
+
+    Hãy trả về kết quả dưới dạng JSON với cấu trúc: {{"type": "GENERAL" | "SPECIFIC", "index": SỐ_THỨ_TỰ | null}}
+    - Nếu yêu cầu là "GENERAL", "index" sẽ là null.
+    - Nếu không có sản phẩm nào phù hợp, hãy trả về {{"type": "NONE", "index": null}}
+
+    Lịch sử hội thoại:
+    {history_text}
+    Yêu cầu mới nhất của khách hàng: "{user_query}"
+    Danh sách sản phẩm để chọn:
+    {prompt_list}
+
+    JSON kết quả:
+    """
+
+    try:
+        model = get_gemini_model()
+        if model:
+            response = model.generate_content(prompt)
+            json_text = re.search(r'\{.*\}', response.text, re.DOTALL).group(0)
+            data = json.loads(json_text)
+            
+            request_type = data.get("type", "NONE")
+            index = data.get("index")
+
+            if request_type == "SPECIFIC" and index is not None and 0 <= index < len(product_candidates):
+                print(f"AI đánh giá: SPECIFIC, chọn index: {index}")
+                return {'type': 'SPECIFIC', 'product': product_candidates[index]}
+            
+            print(f"AI đánh giá: {request_type}")
+            return {'type': request_type, 'product': None}
+
+    except Exception as e:
+        print(f"Lỗi khi AI đánh giá và chọn sản phẩm: {e}")
+
+    # Fallback an toàn
+    return {'type': 'NONE', 'product': None}
