@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Literal, Optional
 class ChatRequest(BaseModel):
     message: str
     model_choice: Literal["gemini", "lmstudio", "openai"] = "gemini"
+    image_url: Optional[str] = None
 
 class ImageInfo(BaseModel):
     product_name: str

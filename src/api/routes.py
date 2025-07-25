@@ -1,10 +1,14 @@
 from fastapi import HTTPException
 from typing import Dict, Any, List, Set
 import threading
+import io
+import requests
+from PIL import Image
+import google.generativeai as genai
 
 from src.models.schemas import ChatRequest, ChatResponse, ImageInfo, PurchaseItem, CustomerInfo
 from src.services.intent_service import analyze_intent_and_extract_entities, extract_customer_info
-from src.services.search_service import search_products
+from src.services.search_service import search_products, search_products_by_image
 from src.services.response_service import generate_llm_response
 from src.utils.helpers import is_asking_for_more
 from src.config.settings import PAGE_SIZE
@@ -19,9 +23,10 @@ def _get_product_key(product: Dict) -> str:
 async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> ChatResponse:
     user_query = request.message
     model_choice = request.model_choice
+    image_url = request.image_url
 
-    if not user_query:
-        raise HTTPException(status_code=400, detail="Không có tin nhắn nào được gửi")
+    if not user_query and not image_url:
+        raise HTTPException(status_code=400, detail="Không có tin nhắn hoặc hình ảnh nào được gửi")
 
     with chat_history_lock:
         session_data = chat_history.get(session_id, {
@@ -34,6 +39,44 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "negativity_score": 0
         }).copy()
         history = session_data["messages"][-14:].copy()
+
+    if image_url:
+        print(f"Phát hiện hình ảnh từ URL: {image_url}, bắt đầu xử lý...")
+        try:
+            # 1. Tải ảnh từ URL
+            response = requests.get(image_url, timeout=15)
+            response.raise_for_status()
+            
+            # 2. Đọc dữ liệu ảnh
+            img = Image.open(io.BytesIO(response.content))
+
+            # 3. Tạo embedding cho ảnh
+            embedding_result = genai.embed_content(
+                model="models/embedding-001",
+                content=img,
+                task_type="retrieval_query"
+            )
+            image_embedding = embedding_result['embedding']
+
+            # 4. Tìm kiếm các sản phẩm tương đồng
+            retrieved_data = search_products_by_image(image_embedding)
+            
+            if not user_query:
+                user_query = "Tìm sản phẩm tương tự trong ảnh"
+
+            response_text = generate_llm_response(
+                user_query=user_query,
+                search_results=retrieved_data,
+                history=history,
+                model_choice=model_choice
+            )
+            
+            _update_chat_history(session_id, user_query, response_text, retrieved_data, session_data)
+            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
+
+        except Exception as e:
+            print(f"Lỗi nghiêm trọng trong luồng xử lý ảnh: {e}")
+            return ChatResponse(reply="Dạ, em xin lỗi, đã có lỗi xảy ra khi xử lý hình ảnh của mình ạ.", history=history)
 
     if user_query.strip().lower() == "/bot":
         session_data["state"] = None

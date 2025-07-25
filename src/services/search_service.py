@@ -67,3 +67,35 @@ def search_products(
     except Exception as e:
         print(f"Lỗi khi tìm kiếm: {e}")
         return []
+    
+def search_products_by_image(image_embedding: list, top_k: int = 1) -> list:
+    """
+    Thực hiện tìm kiếm k-Nearest Neighbor (kNN) trong Elasticsearch
+    để tìm các sản phẩm có ảnh tương đồng nhất.
+    """
+    if not image_embedding:
+        return []
+
+    knn_query = {
+        "field": "image_embedding", 
+        "query_vector": image_embedding,
+        "k": top_k,
+        "num_candidates": 100 
+    }
+
+    try:
+        response = es_client.search(
+            index=INDEX_NAME,
+            knn=knn_query,
+            size=top_k,
+            _source_includes=[ 
+                "product_name", "category", "properties", "lifecare_price",
+                "inventory", "avatar_images", "link_product"
+            ]
+        )
+        hits = [hit['_source'] for hit in response['hits']['hits']]
+        print(f"Tìm thấy {len(hits)} sản phẩm tương đồng bằng hình ảnh.")
+        return hits
+    except Exception as e:
+        print(f"Lỗi khi tìm kiếm bằng vector: {e}")
+        return []
