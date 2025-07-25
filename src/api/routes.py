@@ -216,9 +216,9 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                     full_name = f"{product_name} ({properties})"
                 
                 if available_stock == 0:
-                    response_text = f"Dạ, em xin lỗi, sản phẩm '{full_name}' bên em hiện đang hết hàng ạ."
+                    response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em hiện đang hết hàng ạ."
                 elif requested_quantity > available_stock:
-                    response_text = f"Dạ, em xin lỗi, sản phẩm '{full_name}' bên em chỉ còn {available_stock} sản phẩm ạ. Anh/chị có thể lấy số lượng này được không ạ."
+                    response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em chỉ còn {available_stock} sản phẩm ạ. Anh/chị có muốn lấy số lượng này không ạ."
                 else:
                     response_text = f"Dạ, em xác nhận anh/chị muốn đặt mua sản phẩm {full_name} (Số lượng: {requested_quantity}) đúng không ạ?"
                     session_data["state"] = "awaiting_purchase_confirmation"

@@ -96,19 +96,17 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
     Xây dựng context thông tin sản phẩm, nhóm các sản phẩm cùng tên lại với nhau.
     """
     product_groups = defaultdict(list)
-    # Bước 1: Nhóm các sản phẩm theo tên chính
+    
     for item in search_results:
         product_groups[item.get('product_name', 'N/A')].append(item)
 
     product_context = "Dữ liệu sản phẩm tìm thấy:\n"
-    # Bước 2: Tạo chuỗi context từ dữ liệu đã được nhóm
+    
     for name, items in product_groups.items():
         product_context += f"- Tên: {name}\n"
 
-        # Sắp xếp các phiên bản để đảm bảo thứ tự nhất quán
-        sorted_items = sorted(items, key=lambda x: x.get('properties', ''))
+        sorted_items = sorted(items, key=lambda x: str(x.get('properties', '')))
 
-        # Nếu chỉ có một phiên bản, hiển thị trực tiếp
         if len(sorted_items) == 1:
             item = sorted_items[0]
             prop = item.get('properties')
@@ -118,18 +116,22 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
             price = item.get('lifecare_price', 0)
             price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
             product_context += f"  Giá: {price_str}\n"
-            product_context += f"  Tồn kho: {item.get('inventory', 0)}\n"
+            inventory = item.get('inventory', 0)
+            if inventory > 0:
+                product_context += f"  Tình trạng: Còn hàng ({inventory} sản phẩm)\n"
+            else:
+                product_context += "  Tình trạng: Hết hàng\n"
         else:
-            # Nếu có nhiều phiên bản, liệt kê chi tiết từng phiên bản
             product_context += "  Lưu ý: Sản phẩm này có nhiều thuộc tính khác nhau (ví dụ: loại, cỡ, model, màu,...). Các phiên bản có sẵn:\n"
             for item in sorted_items:
                 prop = item.get('properties', 'N/A')
                 price = item.get('lifecare_price', 0)
                 inventory = item.get('inventory', 0)
                 price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
-                product_context += f"    + Loại: {prop} | Giá: {price_str} | Tồn kho: {inventory}\n"
+                stock_str = f"Còn hàng ({inventory})" if inventory > 0 else "Hết hàng"
+                product_context += f"    + {prop} - Giá: {price_str} - Tình trạng: {stock_str}\n"
 
-        # Thêm mô tả chung (nếu cần) từ sản phẩm đầu tiên
+        
         if include_specs:
             product_context += f"  Mô tả: {sorted_items[0].get('specifications', 'N/A')}\n"
     return product_context
@@ -254,11 +256,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Áp dụng khi khách hỏi "còn không?", "còn loại nào nữa không?" hoặc có thể là "tiếp đi" (tùy vào ngữ cảnh cuộc trò chuyện). Hiểu rằng khách muốn xem thêm sản phẩm khác (cùng chủ đề), **không phải hỏi tồn kho**.
 
 8.  **Tồn kho:**
-    - **KHÔNG** tự động nói ra tồn kho.
-    - **Chỉ áp dụng** khi khách hỏi về tình trạng có sẵn của **một sản phẩm rất cụ thể** đã được chỉ định rõ ràng.
-
+    - **KHÔNG** liệt kê các sản phẩm hoặc các phiên bản sản phẩm có "Tình trạng: Hết hàng".
+    - **KHÔNG** tự động nói ra số lượng tồn kho chính xác.
+    
 9.  **Giá sản phẩm:**
-    - **Các sản phẩm có giá là **Liên hệ** thì **KHÔNG ĐƯỢC** nói ra giá.
+    - **Các sản phẩm có giá là **Liên hệ** thì **KHÔNG ĐƯỢC** nói ra giá, chỉ nói tên sản phẩm KHÔNG KÈM GIÁ.
+    - **Các sản phẩm có giá **KHÁC** **Liên hệ** thì hãy luôn nói kèm giá khi liệt kê.
     - **CHỈ KHI** khách hàng hỏi giá của sản phẩm có giá "Liên hệ" thì hãy nói "Sản phẩm này em chưa có giá chính xác, nếu anh/chị muốn mua thì em sẽ xem lại và báo lại cho anh chị một mức giá hợp lý".
 
 10.  **Xưng hô và Định dạng:**
