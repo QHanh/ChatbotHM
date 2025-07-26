@@ -161,9 +161,28 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         session_data["negativity_score"] += 1
         if session_data["negativity_score"] >= 4:
             analysis_result["wants_human_agent"] = True
+
+    if analysis_result.get("wants_store_info"):
+        response_text = "Dạ, anh/chị có thể đến xem và mua hàng trực tiếp tại cửa hàng Hoàng Mai Mobile ở địa chỉ: Số 8 ngõ 117 Thái Hà, Phường Trung Liệt, Quận Đống Đa, Hà Nội. Sđt 0982153333 https://maps.app.goo.gl/HM9RTi64wpC1GgFp8?g_st=ic"
+        map_image_url = "https://s3.hn-1.cloud.cmctelecom.vn/dangbai/hmstore.jpg"
+        map_image = [
+            ImageInfo(
+                product_name="Bản đồ đường đi",
+                image_url=map_image_url,
+                product_link=""
+            )
+        ]
+        _update_chat_history(session_id, user_query, response_text, session_data)
+        return ChatResponse(
+            reply=response_text, 
+            history=chat_history[session_id]["messages"].copy(),
+            human_handover_required=False,
+            has_negativity=False,
+            images=map_image
+        )
     
     if analysis_result.get("wants_human_agent"):
-        response_text = "Dạ vâng ạ, anh/chị đợi chút, nhân viên bên em sẽ vào trả lời trực tiếp ngay ạ.\nNếu anh chị muốn tiếp tục chat với bot hãy chat lệnh '/bot' ạ."
+        response_text = "Dạ em đã thông báo lại với anh Hoàng. Anh/chị đợi chút, anh Hoàng sẽ vào trả lời trực tiếp ngay ạ.\n\nNếu anh/chị muốn tiếp tục chat với bot hãy chat lệnh '/bot' ạ."
         session_data["state"] = "human_handover"
         session_data["handover_timestamp"] = time.time()
         
