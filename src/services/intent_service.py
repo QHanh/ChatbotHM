@@ -40,7 +40,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
       "is_purchase_intent": <true nếu khách muốn mua/chốt đơn, ví dụ: "cho mình loại này", "chốt đơn", "lấy cho mình cái này", ngược lại false>,
       "is_add_to_order_intent": <true nếu khách muốn mua thêm/thêm đơn, ngược lại false>,
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
-      "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", "xuất xứ", "nơi sản xuất", ngược lại false>,
+      "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", "xuất xứ", "nơi sản xuất", "khách hàng muốn so sánh các sản phẩm", ngược lại false>,
       "wants_human_agent": <true nếu khách muốn gặp người thật, ngược lại false>,
       "wants_store_info": <true nếu khách muốn biết địa chỉ, thời gian làm việc hoặc số hotline của cửa hàng>,
       "is_negative": <true nếu khách hàng có thái độ tiêu cực, ngược lại false>,
