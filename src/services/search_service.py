@@ -1,6 +1,7 @@
 from elastic_search_push_data import es_client, INDEX_NAME
 from src.config.settings import PAGE_SIZE
 
+INDEX_NAME = "products_news"
 def search_products(
     product_name: str,
     category: str = None,

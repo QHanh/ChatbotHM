@@ -105,8 +105,8 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
 
             response_text = (
                 f"Dạ vâng ạ. Vậy để đặt đơn hàng, anh/chị có thể vào đường link {product_link} để đặt hàng hoặc đến xem trực tiếp tại cửa hàng chúng em tại số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội (thời gian mở cửa từ 8h đến 18h).\n"
-                "Dạ anh/chị vui lòng cho em xin tên, số điện thoại và địa chỉ để em lên đơn cho anh/chị ạ.\n"
-                "Em cảm ơn anh/chị nhiều ạ."
+                "Dạ anh/chị vui lòng cho em xin tên, số điện thoại và địa chỉ để em lên đơn cho anh/chị ạ. /-ok\n"
+                "Em cảm ơn anh/chị nhiều ạ. /-heart"
             )
             session_data["state"] = "awaiting_customer_info"
             
@@ -141,7 +141,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             items=[purchase_item]
         )
         
-        response_text = "Dạ em đã nhận được thông tin. Em cảm ơn anh/chị!"
+        response_text = "Dạ em đã nhận được thông tin. Em cảm ơn anh/chị! /-heart"
         session_data["state"] = None
         session_data["pending_purchase_item"] = None
         
@@ -163,7 +163,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             analysis_result["wants_human_agent"] = True
 
     if analysis_result.get("wants_store_info"):
-        response_text = "Dạ, anh/chị có thể đến xem và mua hàng trực tiếp tại cửa hàng Hoàng Mai Mobile ở địa chỉ: Số 8 ngõ 117 Thái Hà, Phường Trung Liệt, Quận Đống Đa, Hà Nội. Sđt 0982153333 https://maps.app.goo.gl/HM9RTi64wpC1GgFp8?g_st=ic"
+        response_text = "Dạ, anh/chị có thể đến xem và mua hàng trực tiếp tại cửa hàng Hoàng Mai Mobile ở địa chỉ:\n👉 Số 8 ngõ 117 Thái Hà, Phường Trung Liệt, Quận Đống Đa, Hà Nội.\n👉 SĐT: 0982153333\n👉 Link google map: https://maps.app.goo.gl/HM9RTi64wpC1GgFp8?g_st=ic"
         map_image_url = "https://s3.hn-1.cloud.cmctelecom.vn/dangbai/hmstore.jpg"
         map_image = [
             ImageInfo(
@@ -199,7 +199,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     asking_for_more = is_asking_for_more(user_query)
 
     if analysis_result.get("is_add_to_order_intent"):
-        response_text = "Dạ vâng, anh/chị muốn mua thêm sản phẩm nào ạ?"
+        response_text = "Dạ vâng, anh/chị muốn mua thêm sản phẩm nào ạ? :b"
         session_data["last_query"] = None
 
     elif analysis_result.get("is_purchase_intent"):
@@ -215,7 +215,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             # strict_properties=True
         )
         if not products:
-            response_text = f"Dạ, em xin lỗi, bên em không có sản phẩm này ạ."
+            response_text = f"Dạ, em xin lỗi, bên em không có sản phẩm này ạ. :--|"
         else:
             history_text = format_history_text(history, limit=5)
             evaluation = evaluate_and_choose_product(user_query, history_text, products, model_choice)
@@ -235,11 +235,11 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                     full_name = f"{product_name} ({properties})"
                 
                 if available_stock == 0:
-                    response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em hiện đang hết hàng ạ."
+                    response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em hiện đang hết hàng ạ. :--|"
                 elif requested_quantity > available_stock:
-                    response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em chỉ còn {available_stock} sản phẩm ạ. Anh/chị có muốn lấy số lượng này không ạ."
+                    response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em chỉ còn {available_stock} sản phẩm ạ. Anh/chị có muốn lấy số lượng này không ạ? :b"
                 else:
-                    response_text = f"Dạ, em xác nhận anh/chị muốn đặt mua sản phẩm {full_name} (Số lượng: {requested_quantity}) đúng không ạ?"
+                    response_text = f"Dạ, em xác nhận anh/chị muốn đặt mua sản phẩm {full_name} (Số lượng: {requested_quantity}) đúng không ạ? :b"
                     session_data["state"] = "awaiting_purchase_confirmation"
                     session_data["pending_purchase_item"] = {
                         "product_data": product_to_check,
@@ -248,11 +248,11 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             elif request_type == "GENERAL":
                 response_text = (
                     f"Dạ, bên em có nhiều loại {search_params.get('product_name')} ạ.\n"
-                    "Anh/chị đang quan tâm đến loại cụ thể nào ạ?"
+                    "Anh/chị đang quan tâm đến loại cụ thể nào để em kiểm tra giúp mình ạ? /-heart"
                 )
                 retrieved_data = products
             else:
-                response_text = f"Dạ, em xin lỗi, bên em không có sản phẩm này của mình ạ."
+                response_text = f"Dạ, em xin lỗi, bên em không có sản phẩm này của mình ạ. :--|"
 
     elif asking_for_more and session_data.get("last_query"):
         response_text, retrieved_data, product_images = _handle_more_products(

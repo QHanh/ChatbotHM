@@ -24,7 +24,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - **Ý định mua hàng (`is_purchase_intent`=true):** Chỉ xác định là mua hàng khi khách hàng dùng các từ dứt khoát như "chốt đơn", "lấy cho anh cái này", "đặt mua" và **KHÔNG** đi kèm với yêu cầu xin thông tin. Nếu không nói gì, số lượng mặc định là 1. Khách hàng muốn **hỏi giá hay báo giá** thì is_purchase_intent là `false`.
     - Hãy trích xuất cả số lượng đặt hàng (`quantity`) nếu khách hàng đề cập. Nếu không nói gì, số lượng mặc định là 1.
     - **Phân tích thái độ:** Nếu khách hàng thể hiện sự bực bội, chê bai, phàn nàn, hoặc dùng từ ngữ tiêu cực, hãy đặt `is_negative` là `true`.
-    - **Ý định thêm đơn hàng:** Nếu khách hàng muốn mua thêm, thêm đơn, bổ sung đơn, hãy đặt `is_add_to_order_intent` là `true` và đặt `is_purchase_intent` là `false`.
+    - **Ý định thêm đơn hàng (`is_add_to_order_intent`):** Chỉ là `true` khi khách hàng nói rõ ràng muốn "bổ sung đơn", "thêm đơn hàng". Các câu hỏi như "còn nữa không", "còn nữa chứ" KHÔNG phải là ý định này.
     - **Quy tắc ưu tiên:** `is_add_to_order_intent` và `is_purchase_intent` không thể cùng là `true`. `is_add_to_order_intent` chỉ đúng cho các câu hỏi ban đầu như "mua thêm", "bổ sung đơn". Khi khách hàng đã chỉ định một sản phẩm cụ thể để mua, `is_purchase_intent` sẽ là `true` và `is_add_to_order_intent` phải là `false`.
     - **Ý định muốn biết thông tin cửa hàng:** Nếu khách hàng hỏi về địa chỉ, giờ làm việc, hoặc muốn đến mua trực tiếp, hãy đặt `wants_store_info` là `true`.
     - **Ý định gặp người thật (chat):** Chỉ đặt `wants_human_agent` là `true` khi khách hàng muốn nói chuyện, chat với nhân viên, người thật.

@@ -16,8 +16,8 @@ load_dotenv()
 warnings.filterwarnings("ignore", category=UserWarning)
 
 ELASTIC_HOST = "http://localhost:9200"
-INDEX_NAME = "products_news"
-XLSX_FILE_PATH = "dulieu_1707.xlsx"
+INDEX_NAME = "products_news_2807"
+XLSX_FILE_PATH = "dulieu_2807.xlsx"
 
 try:
     es_client = Elasticsearch(hosts=[ELASTIC_HOST])
