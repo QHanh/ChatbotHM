@@ -8,23 +8,12 @@ def is_asking_for_more(user_query: str) -> bool:
     ]
     return any(kw in user_query.lower() for kw in keywords)
 
-def wants_specifications(user_query: str) -> bool:
-    """
-    Kiểm tra xem câu hỏi của người dùng có chứa từ khóa
-    yêu cầu thông số/chi tiết sản phẩm hay không.
-    """
-    keywords = [
-        "thông số", "chi tiết", "cấu hình", "mô tả",
-        "thông tin", "cụ thể", "rõ hơn", "kỹ hơn"
-    ]
-    return any(kw in user_query.lower() for kw in keywords)
-
 def is_general_query(user_query: str) -> bool:
     """Kiểm tra xem có phải câu hỏi chung chung về sản phẩm không."""
-    chung_chung = [
+    general_queries = [
         "shop có những sản phẩm nào", "shop đang kinh doanh gì", "cửa hàng bán những gì"
     ]
-    return any(kw in user_query.lower() for kw in chung_chung)
+    return any(kw in user_query.lower() for kw in general_queries)
 
 def format_history_text(history: List[dict], limit: int = 10) -> str:
     """Format lịch sử hội thoại thành text."""

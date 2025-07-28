@@ -18,6 +18,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     Bạn là một AI phân tích truy vấn của khách hàng. Dựa vào lịch sử hội thoại và câu hỏi mới nhất, hãy phân tích và trả về một đối tượng JSON.
     QUAN TRỌNG: 
     - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
+    - **Kế thừa ý định:** Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước (ví dụ: bot hỏi 'muốn xem loại nào', 'muốn xem ảnh loại nào?', khách trả lời 'tất cả' hoặc 'gửi đi', 'ok'), hãy kế thừa ý định từ lượt trước đó. Nếu ý định trước đó cần tìm kiếm, thì `needs_search` phải là `true` và các `search_params` phải được suy ra từ ngữ cảnh.
     - Nếu câu hỏi của khách hàng quá ngắn, là một lời chào, lời cảm ơn, hoặc không rõ ràng về sản phẩm (ví dụ: "ok", "thanks", "ho", "hi", "uk"), hãy đặt "needs_search" là "false".
     - **Ưu tiên ý định thông tin:** Nếu khách hàng hỏi xin "ảnh", "thông số", thì `is_purchase_intent` PHẢI là `false`.
     - **Ý định mua hàng (`is_purchase_intent`=true):** Chỉ xác định là mua hàng khi khách hàng dùng các từ dứt khoát như "chốt đơn", "lấy cho anh cái này", "đặt mua" và **KHÔNG** đi kèm với yêu cầu xin thông tin. Nếu không nói gì, số lượng mặc định là 1. Khách hàng muốn **hỏi giá hay báo giá** thì is_purchase_intent là `false`.
@@ -36,7 +37,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
 
     Hãy phân tích và điền vào cấu trúc JSON sau:
     {{
-      "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm gồm cả giá để trả lời, ngược lại false>,
+      "needs_search": <true nếu cần tìm kiếm thông tin sản phẩm gồm cả giá, ảnh để trả lời, ngược lại false>,
       "is_purchase_intent": <true nếu khách muốn mua/chốt đơn, ví dụ: "cho mình loại này", "chốt đơn", "lấy cho mình cái này", ngược lại false>,
       "is_add_to_order_intent": <true nếu khách muốn mua thêm/thêm đơn, ngược lại false>,
       "wants_images": <true nếu khách hỏi về "ảnh", "hình ảnh", ngược lại false>,
@@ -82,7 +83,10 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
 
     - Câu hỏi: "tôi muốn thêm đơn", "tôi muốn mua thêm", "tôi muốn bổ sung đơn hàng"
       JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": true, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{...}} }}
- 
+
+    - Bối cảnh: Bot vừa hỏi "Dạ, mình muốn xem ảnh của loại tô vít 2UUL nào ạ?". Khách trả lời: "Tất cả"
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "tô vít 2UUL", "category": "tô vít", "properties": ""}}}}
+
     JSON của bạn:
     """
 

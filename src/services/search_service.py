@@ -66,7 +66,7 @@ def search_products(
         print(f"Lỗi khi tìm kiếm: {e}")
         return []
     
-def search_products_by_image(image_embedding: list, top_k: int = 1, min_similarity: float = 0.9) -> list:
+def search_products_by_image(image_embedding: list, top_k: int = 1, min_similarity: float = 0.97) -> list:
     """
     Thực hiện tìm kiếm k-Nearest Neighbor (kNN) trong Elasticsearch
     để tìm các sản phẩm có ảnh tương đồng nhất.
@@ -86,7 +86,7 @@ def search_products_by_image(image_embedding: list, top_k: int = 1, min_similari
         response = es_client.search(
             index=INDEX_NAME,
             knn=knn_query,
-            min_score=min_similarity, # GỢI Ý: Thêm ngưỡng điểm số tối thiểu
+            min_score=min_similarity,
             size=top_k,
             _source_includes=[ 
                 "product_name", "category", "properties", "lifecare_price",

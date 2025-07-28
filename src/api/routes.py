@@ -14,7 +14,7 @@ from src.utils.helpers import is_asking_for_more, format_history_text
 from src.config.settings import PAGE_SIZE
 from src.services.response_service import evaluate_and_choose_product
 import time
-HANDOVER_TIMEOUT = 1800
+HANDOVER_TIMEOUT = 600
 
 chat_history: Dict[str, Dict[str, Any]] = {}
 chat_history_lock = threading.Lock()
@@ -42,7 +42,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "negativity_score": 0,
             "handover_timestamp": None
         }).copy()
-        history = session_data["messages"][-14:].copy()
+        history = session_data["messages"][-8:].copy()
 
     API_ENDPOINT = "http://localhost:8000/embed"
     if image_url:

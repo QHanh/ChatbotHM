@@ -145,7 +145,10 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     if wants_images:
         product_list_str = '\n'.join(f'- {info}' for info in product_infos or [])
         image_instruction = f"""## HƯỚNG DẪN ĐẶC BIỆT KHI CUNG CẤP HÌNH ẢNH ##
-- Khi khách muốn xem ảnh, câu trả lời PHẢI có 2 phần: [ANSWER] và [PRODUCT_IMAGE].
+- Nhiệm vụ của bạn là tạo ra một danh sách các sản phẩm kèm ảnh dựa trên "DỮ LIỆU CUNG CẤP".
+- **KHÔNG** được hỏi lại khách hàng. **KHÔNG** thêm bất kỳ lời thoại nào khác.
+- Câu trả lời của bạn **BẮT BUỘC** phải có 2 phần: `[ANSWER]` và `[PRODUCT_IMAGE]`.
+
 - **Phần [ANSWER]:**
     - **KHÔNG** thêm bất kỳ lời chào hay câu giới thiệu nào.
     - **Chỉ liệt kê** lại các sản phẩm mà khách muốn xem ảnh.
@@ -199,7 +202,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - **BẠN PHẢI TRẢ LỜI DỰA TRÊN NGỮ CẢNH CỦA LỊCH SỬ HỘI THOẠI.**
 - **TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI CHỦ ĐỀ.** Ví dụ: nếu cuộc trò chuyện đang về "sản phẩm A", câu trả lời của bạn cũng phải về "sản phẩm A", không được tự ý chuyển sang "sản phẩm B".
 - Hãy trả lời một cách thân thiện và lễ phép.
-- Khi khách hỏi về thông tin cửa hàng, hãy trả lời dựa vào thông tin đã cung cấp.
+- **Nếu tin nhắn cuối cùng trong lịch sử là bot nói về việc chuyển cho nhân viên, và câu hỏi mới của khách là một lời chào chung chung (ví dụ: "Hi", "hello", "chào shop"), HÃY bỏ qua ngữ cảnh cũ và chào lại một cách bình thường như một cuộc trò chuyện mới.** Ví dụ: "Dạ, em chào anh/chị. Em có thể giúp gì cho mình ạ?"
 
 ## QUY TẮC ##
 {greeting_rule}
