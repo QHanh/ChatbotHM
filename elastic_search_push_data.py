@@ -127,7 +127,73 @@ def process_and_embed_data():
     except Exception as e:
         print(f"Đã xảy ra lỗi khi index dữ liệu: {e}")
 
+def update_inventory_and_price():
+    """
+    Cập nhật tồn kho và giá sản phẩm từ file XLSX vào Elasticsearch.
+    Chỉ cập nhật các trường 'inventory' và 'lifecare_price' dựa trên 'product_code'.
+    """
+    try:
+        df = pd.read_excel(XLSX_FILE_PATH)
+        df.columns = [
+            'product_code', 'product_name', 'category', 'properties',
+            'lifecare_price', 'trademark', 'guarantee', 'inventory',
+            'specifications', 'avatar_images', 'link_product'
+        ]
+        # Giữ lại các cột cần thiết
+        df = df[['product_code', 'lifecare_price', 'inventory']].copy()
+        df = df.dropna(subset=['product_code'])
+        
+        # Làm sạch dữ liệu
+        df['inventory'] = pd.to_numeric(df['inventory'], errors='coerce').fillna(0).astype(int)
+        df['lifecare_price'] = pd.to_numeric(df['lifecare_price'].astype(str).str.replace(',', ''), errors='coerce').fillna(0).astype(float)
+
+    except FileNotFoundError:
+        print(f"Lỗi: Không tìm thấy file '{XLSX_FILE_PATH}'.")
+        return
+
+    actions = []
+    total_rows = len(df)
+
+    for index, row in df.iterrows():
+        product_code = row['product_code']
+        print(f"Chuẩn bị cập nhật dòng {index + 1}/{total_rows}: {product_code}")
+        
+        action = {
+            "_op_type": "update",
+            "_index": INDEX_NAME,
+            "_id": product_code,
+            "doc": {
+                "inventory": row['inventory'],
+                "lifecare_price": row['lifecare_price']
+            }
+        }
+        actions.append(action)
+
+    if not actions:
+        print("Không có dữ liệu hợp lệ để cập nhật.")
+        return
+
+    print(f"\nChuẩn bị cập nhật {len(actions)} sản phẩm...")
+    try:
+        success, failed = bulk(es_client, actions, raise_on_error=False)
+        print(f"Cập nhật thành công: {success} sản phẩm.")
+        if failed:
+            print(f"Cập nhật thất bại: {len(failed)} sản phẩm.")
+            for i, fail_info in enumerate(failed[:5]):
+                # In ra thông tin lỗi chi tiết
+                print(f"  Lỗi {i+1} với ID '{fail_info['update']['_id']}': {fail_info['update']['error']}")
+
+    except Exception as e:
+        print(f"Đã xảy ra lỗi khi cập nhật dữ liệu hàng loạt: {e}")
+
 if __name__ == "__main__":
-    create_index_with_embedding_mapping()
-    process_and_embed_data()
-    print("\nQuá trình xử lý và index dữ liệu đã hoàn tất.")
+    # --- Chạy lần đầu ---
+    # print("Bắt đầu quá trình tạo index và đẩy dữ liệu mới...")
+    # create_index_with_embedding_mapping()
+    # process_and_embed_data()
+    # print("\nQuá trình xử lý và index dữ liệu ban đầu đã hoàn tất.")
+
+    # --- Cập nhật hàng ngày ---
+    print("Bắt đầu quá trình cập nhật giá và tồn kho...")
+    update_inventory_and_price()
+    print("\nQuá trình cập nhật đã hoàn tất.")
