@@ -6,6 +6,9 @@ class ChatRequest(BaseModel):
     model_choice: Literal["gemini", "lmstudio", "openai"] = "gemini"
     image_url: Optional[str] = None
 
+class ControlBotRequest(BaseModel):
+    command: str
+
 class ImageInfo(BaseModel):
     product_name: str
     image_url: str

@@ -1,12 +1,12 @@
-from fastapi import HTTPException
-from typing import Dict, Any, List, Set
+from fastapi import HTTPException, Query, UploadFile, File
+from typing import Dict, Any, List, Set, Optional
 import threading
 import io
 import requests
 from PIL import Image
 import google.generativeai as genai
 
-from src.models.schemas import ChatRequest, ChatResponse, ImageInfo, PurchaseItem, CustomerInfo
+from src.models.schemas import ChatRequest, ChatResponse, ImageInfo, PurchaseItem, CustomerInfo, ControlBotRequest
 from src.services.intent_service import analyze_intent_and_extract_entities, extract_customer_info
 from src.services.search_service import search_products, search_products_by_image
 from src.services.response_service import generate_llm_response
@@ -84,15 +84,23 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             print(f"Lỗi nghiêm trọng trong luồng xử lý ảnh: {e}")
             return ChatResponse(reply="Dạ, em xin lỗi, đã có lỗi xảy ra khi xem hình ảnh của mình ạ.", history=history)
 
+    if session_data.get("state") == "stop_bot":
+        _update_chat_history(session_id, user_query, "", session_data)
+        return ChatResponse(reply="", history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
+    
     if user_query.strip().lower() == "/bot":
         session_data["state"] = None
         session_data["negativity_score"] = 0
         response_text = "Dạ, em có thể giúp gì tiếp cho anh/chị ạ?"
         _update_chat_history(session_id, user_query, response_text, session_data)
         return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
+
+    if session_data.get("state") == "human_chatting":
+        _update_chat_history(session_id, user_query, "", session_data)
+        return ChatResponse(reply="", history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
     
-    if session_data.get("state") == "human_handover":
-        # response_text = "Dạ, nhân viên bên em đang vào ngay ạ, anh/chị vui lòng đợi trong giây lát."
+    if session_data.get("state") == "human_calling":
+        response_text = "Dạ, nhân viên bên em đang vào ngay ạ, anh/chị vui lòng đợi trong giây lát."
         _update_chat_history(session_id, user_query, "", session_data)
         return ChatResponse(reply="", history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
 
@@ -183,7 +191,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     
     if analysis_result.get("wants_human_agent"):
         response_text = "Dạ em đã thông báo lại với anh Hoàng. Anh/chị đợi chút, anh Hoàng sẽ vào trả lời trực tiếp ngay ạ.\n\nNếu anh/chị muốn tiếp tục chat với bot hãy chat lệnh '/bot' ạ."
-        session_data["state"] = "human_handover"
+        session_data["state"] = "human_calling"
         session_data["handover_timestamp"] = time.time()
         
         _update_chat_history(session_id, user_query, response_text, session_data)
@@ -276,6 +284,75 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         human_handover_required=analysis_result.get("human_handover_required", False),
         has_negativity=False
     )
+
+async def control_bot_endpoint(request: ControlBotRequest, session_id: str):
+    """
+    Điều khiển trạng thái của bot (dừng hoặc tiếp tục).
+    Tạo session mới nếu chưa tồn tại.
+    """
+    with chat_history_lock:
+        if session_id not in chat_history:
+            # Nếu session_id không tồn tại, tạo mới.
+            chat_history[session_id] = {
+                "messages": [],
+                "last_query": None,
+                "offset": 0,
+                "shown_product_keys": set(),
+                "state": None,
+                "pending_purchase_item": None,
+                "negativity_score": 0,
+                "handover_timestamp": None
+            }
+            print(f"Đã tạo session mới: {session_id} thông qua control endpoint.")
+
+        command = request.command.lower()
+        
+        if command == "stop":
+            # Chuyển bot sang trạng thái stop_bot để tạm dừng
+            chat_history[session_id]["state"] = "stop_bot"
+            return {"status": "success", "message": f"Bot cho session {session_id} đã được tạm dừng."}
+        
+        elif command == "start":
+            # Kích hoạt lại bot
+            if chat_history[session_id].get("state") == "stop_bot":
+                chat_history[session_id]["state"] = None
+                chat_history[session_id]["negativity_score"] = 0
+                chat_history[session_id]["messages"].append({
+                    "user": "[SYSTEM]",
+                    "bot": "Bot đã được kích hoạt lại bởi quản trị viên."
+                })
+                return {"status": "success", "message": f"Bot cho session {session_id} đã được kích hoạt lại."}
+            else:
+                return {"status": "no_change", "message": f"Bot cho session {session_id} đã hoạt động."}
+        
+        else:
+            raise HTTPException(status_code=400, detail="Command không hợp lệ. Chỉ chấp nhận 'start' hoặc 'stop'.")
+
+async def human_chatting_endpoint(session_id: str):
+    """
+    Chuyển sang trạng thái human_chatting.
+    Tạo session mới nếu chưa tồn tại.
+    """
+    with chat_history_lock:
+        if session_id not in chat_history:
+            chat_history[session_id] = {
+                "messages": [],
+                "last_query": None,
+                "offset": 0,
+                "shown_product_keys": set(),
+                "state": None,
+                "pending_purchase_item": None,
+                "negativity_score": 0,
+                "handover_timestamp": None
+            }
+            message = f"Session {session_id} đã được tạo mới và chuyển sang trạng thái human_chatting."
+            print(f"Đã tạo session mới: {session_id} thông qua human_chatting endpoint.")
+        else:
+            message = f"Bot cho session {session_id} đã chuyển sang trạng thái human_chatting."
+
+        chat_history[session_id]["state"] = "human_chatting"
+        chat_history[session_id]["handover_timestamp"] = time.time()
+        return {"status": "success", "message": message}
 
 def _handle_more_products(user_query: str, session_data: dict, history: list, model_choice: str, analysis: dict):
     last_query = session_data["last_query"]

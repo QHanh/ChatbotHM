@@ -4,13 +4,18 @@ import threading
 import time
 
 from src.config.settings import APP_CONFIG, CORS_CONFIG
-from src.models.schemas import ChatRequest
-from src.api.routes import chat_endpoint, chat_history, chat_history_lock, HANDOVER_TIMEOUT
+from src.models.schemas import ChatRequest, ControlBotRequest
+from src.api.routes import (
+    chat_endpoint, 
+    control_bot_endpoint, 
+    human_chatting_endpoint,
+    chat_history, 
+    chat_history_lock, 
+    HANDOVER_TIMEOUT
+)
 
-# Khởi tạo FastAPI app
 app = FastAPI(**APP_CONFIG)
 
-# Thêm CORS middleware
 app.add_middleware(CORSMiddleware, **CORS_CONFIG)
 
 def session_timeout_scanner():
@@ -23,7 +28,7 @@ def session_timeout_scanner():
             current_time = time.time()
             sessions_to_reactivate = []
             for session_id, session_data in chat_history.items():
-                if session_data.get("state") == "human_handover":
+                if session_data.get("state") in ["human_calling", "human_chatting"]:
                     handover_time = session_data.get("handover_timestamp", 0)
                     if (current_time - handover_time) > HANDOVER_TIMEOUT:
                         sessions_to_reactivate.append(session_id)
@@ -58,6 +63,24 @@ async def chat(request: ChatRequest, session_id: str = Query("default", descript
     - **session_id**: ID phiên chat (mặc định là 'default')
     """
     return await chat_endpoint(request, session_id)
+
+@app.post("/control-bot", summary="Dừng hoặc tiếp tục bot cho một session")
+async def control_bot(request: ControlBotRequest, session_id: str = Query(..., description="ID phiên chat")):
+    """
+    Endpoint để điều khiển bot.
+    - **command**: "start" để tiếp tục, "stop" để tạm dừng.
+    - **session_id**: ID của phiên chat cần điều khiển.
+    """
+    return await control_bot_endpoint(request, session_id)
+
+@app.post("/human-chatting/{session_id}", summary="Chuyển session sang trạng thái người chat")
+async def human_chatting(session_id: str):
+    """
+    Endpoint để chuyển một session sang trạng thái `human_chatting`.
+    Nếu session không tồn tại, một session mới sẽ được tạo.
+    - **session_id**: ID của phiên chat cần chuyển đổi.
+    """
+    return await human_chatting_endpoint(session_id)
 
 if __name__ == "__main__":
     import uvicorn
