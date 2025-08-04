@@ -340,7 +340,7 @@ def _get_fallback_response(search_results: List[Dict], needs_product_search: boo
     else:
         return "Dạ, em xin lỗi, em không hiểu rõ câu hỏi của anh/chị. Anh/chị có thể hỏi lại không ạ?"
     
-def evaluate_and_choose_product(user_query: str, history_text: str, product_candidates: List[Dict], model_choice: str = "gemini") -> Dict:
+def evaluate_and_choose_product(user_query: str, history_text: str, product_candidates: List[Dict], requested_products: List[Dict], model_choice: str = "gemini") -> Dict:
     """
     Sử dụng một lệnh gọi AI duy nhất để vừa đánh giá độ cụ thể của yêu cầu,
     vừa chọn ra sản phẩm phù hợp nhất nếu có thể.
