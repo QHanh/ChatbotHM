@@ -10,7 +10,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     """
     history_text = ""
     if history:
-        for turn in history[-5:]:
+        for turn in history[-10:]:
             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
     # GỢI Ý: Đã tích hợp logic và ví dụ về category của bạn vào prompt này.
@@ -27,7 +27,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - **Ý định thêm đơn hàng (`is_add_to_order_intent`):** Chỉ là `true` khi khách hàng nói rõ ràng muốn "bổ sung đơn", "thêm đơn hàng". Các câu hỏi như "còn nữa không", "còn nữa chứ" KHÔNG phải là ý định này.
     - **Quy tắc ưu tiên:** `is_add_to_order_intent` và `is_purchase_intent` không thể cùng là `true`. `is_add_to_order_intent` chỉ đúng cho các câu hỏi ban đầu như "mua thêm", "bổ sung đơn". Khi khách hàng đã chỉ định một sản phẩm cụ thể để mua, `is_purchase_intent` sẽ là `true` và `is_add_to_order_intent` phải là `false`.
     - **Ý định muốn biết thông tin cửa hàng:** Nếu khách hàng hỏi về địa chỉ, giờ làm việc, hoặc muốn đến mua trực tiếp, hãy đặt `wants_store_info` là `true`.
-    - **Ý định gặp người thật (chat):** Chỉ đặt `wants_human_agent` là `true` khi khách hàng muốn nói chuyện, chat với nhân viên, người thật.
+    - **Ý định gặp người thật (chat):** Chỉ đặt `wants_human_agent` là `true` khi khách hàng chắc chắn muốn nói chuyện, chat với nhân viên, người thật. Các câu hỏi như: "Bạn tên gì?" không là ý định muốn gặp người thật.
     - **Phân biệt:** "mua trực tiếp" là `wants_store_info`, "tư vấn trực tiếp" là `wants_human_agent`. Lưu ý: `wants_human_agent` là `true` thì `wants_store_info` phải là `false` và ngược lại.
     
     Lịch sử hội thoại gần đây:
@@ -153,6 +153,7 @@ def extract_customer_info(user_input: str, model_choice: str = "gemini") -> Dict
     prompt = f"""
     Bạn là một AI chuyên bóc tách thông tin. Từ đoạn văn bản dưới đây, hãy trích xuất Tên người (`name`), Số điện thoại (`phone`), và Địa chỉ (`address`) vào một đối tượng JSON.
     Nếu không tìm thấy thông tin nào, hãy để giá trị là null. Chỉ trả về JSON.
+    Nếu họ nói một thông tin nào đó của họ là Không có thì hãy để "Không có".
 
     Văn bản: "{user_input}"
 

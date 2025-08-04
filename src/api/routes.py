@@ -148,7 +148,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             response_text = f"Dạ, anh/chị vui lòng cho em xin { ' và '.join(missing_info) } để em lên đơn ạ."
             session_data["collected_customer_info"] = current_info
             _update_chat_history(session_id, user_query, response_text, session_data)
-            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
+            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
 
         # Nếu đã đủ thông tin
         item_data_with_quantity = session_data.get("pending_purchase_item", {})
