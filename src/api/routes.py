@@ -114,19 +114,54 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     if session_data.get("state") == "awaiting_purchase_confirmation":
         affirmative_responses = ["đúng", "vâng", "ok", "đồng ý", "chốt", "uk", "uh", "ừ", "dạ", "um", "uhm", "ừm", "yes", "chuẩn", "vang", "da", "ừa"]
         if any(word in user_query.lower() for word in affirmative_responses):
-            pending_item = session_data.get("pending_purchase_item", {})
-            product_data = pending_item.get("product_data", {})
-            product_link = product_data.get("link_product", "#")
+            collected_info = session_data.get("collected_customer_info", {})
+            if collected_info.get("name") and collected_info.get("phone") and collected_info.get("address"):
+                
+                item_data_with_quantity = session_data.get("pending_purchase_item", {})
+                item_data = item_data_with_quantity.get("product_data", {})
+                quantity = item_data_with_quantity.get("quantity", 1)
+                
+                purchase_item = PurchaseItem(
+                    product_name=item_data.get("product_name", "N/A"),
+                    properties=item_data.get("properties"),
+                    quantity=quantity
+                )
+                
+                customer_info_obj = CustomerInfo(
+                    name=collected_info.get("name"),
+                    phone=collected_info.get("phone"),
+                    address=collected_info.get("address"),
+                    items=[purchase_item]
+                )
+                
+                response_text = f"Dạ em đã nhận được thông tin cho sản phẩm {purchase_item.product_name}. Em sẽ tạo một đơn hàng mới cho mình ạ. Em cảm ơn anh/chị! /-heart"
+                
+                session_data["state"] = None
+                session_data["pending_purchase_item"] = None
+                
+                _update_chat_history(session_id, user_query, response_text, session_data)
+                
+                return ChatResponse(
+                    reply=response_text,
+                    history=chat_history[session_id]["messages"].copy(),
+                    customer_info=customer_info_obj,
+                    has_purchase=True
+                )
 
-            response_text = (
-                f"Dạ vâng ạ. Vậy để đặt đơn hàng, anh/chị có thể vào đường link {product_link} để đặt hàng hoặc đến xem trực tiếp tại cửa hàng chúng em tại số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội (thời gian mở cửa từ 8h đến 18h).\n"
-                "\nDạ anh/chị vui lòng cho em xin tên, số điện thoại và địa chỉ để em lên đơn cho anh/chị ạ. /-ok\n"
-                "Em cảm ơn anh/chị nhiều ạ. /-heart"
-            )
-            session_data["state"] = "awaiting_customer_info"
-            
-            _update_chat_history(session_id, user_query, response_text, session_data)
-            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
+            else:
+                pending_item = session_data.get("pending_purchase_item", {})
+                product_data = pending_item.get("product_data", {})
+                product_link = product_data.get("link_product", "#")
+
+                response_text = (
+                    f"Dạ vâng ạ. Vậy để đặt đơn hàng, anh/chị có thể vào đường link {product_link} để đặt hàng hoặc đến xem trực tiếp tại cửa hàng chúng em tại số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội (thời gian mở cửa từ 8h đến 18h).\n"
+                    "\nDạ anh/chị vui lòng cho em xin tên, số điện thoại và địa chỉ để em lên đơn cho anh/chị ạ. /-ok\n"
+                    "Em cảm ơn anh/chị nhiều ạ. /-heart"
+                )
+                session_data["state"] = "awaiting_customer_info"
+                
+                _update_chat_history(session_id, user_query, response_text, session_data)
+                return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
         else:
             session_data["state"] = None
             session_data["pending_purchase_item"] = None
