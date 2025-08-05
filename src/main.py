@@ -9,6 +9,7 @@ from src.api.routes import (
     chat_endpoint, 
     control_bot_endpoint, 
     human_chatting_endpoint,
+    power_off_bot_endpoint,
     chat_history, 
     chat_history_lock, 
     HANDOVER_TIMEOUT
@@ -81,6 +82,14 @@ async def human_chatting(session_id: str):
     - **session_id**: ID của phiên chat cần chuyển đổi.
     """
     return await human_chatting_endpoint(session_id)
+
+@app.post("/power-off-bot", summary="Stop or start the bot globally")
+async def power_off_bot(request: ControlBotRequest):
+    """
+    Endpoint to control the bot globally.
+    - **command**: "start" to continue, "stop" to pause.
+    """
+    return await power_off_bot_endpoint(request)
 
 if __name__ == "__main__":
     import uvicorn

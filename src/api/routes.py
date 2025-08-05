@@ -18,12 +18,18 @@ HANDOVER_TIMEOUT = 600
 
 chat_history: Dict[str, Dict[str, Any]] = {}
 chat_history_lock = threading.Lock()
+bot_running = True
+bot_state_lock = threading.Lock()
 
 def _get_product_key(product: Dict) -> str:
     """Tạo một key định danh duy nhất cho sản phẩm."""
     return f"{product.get('product_name', '')}::{product.get('properties', '')}"
 
 async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> ChatResponse:
+    with bot_state_lock:
+        if not bot_running:
+            return ChatResponse(reply="Bot is currently stopped.", history=[], human_handover_required=False)
+    
     user_query = request.message
     model_choice = request.model_choice
     image_url = request.image_url
@@ -498,7 +504,6 @@ def _process_images(wants_images: bool, retrieved_data: list, product_images_nam
                         break
             elif isinstance(image_data, str) and image_data.strip():
                 primary_image_url = image_data
-
             if primary_image_url:
                 images.append(ImageInfo(
                     product_name=product_data.get('product_name', ''),
@@ -506,3 +511,16 @@ def _process_images(wants_images: bool, retrieved_data: list, product_images_nam
                     product_link=str(product_data.get('link_product', ''))
                 ))
     return images
+
+async def power_off_bot_endpoint(request: ControlBotRequest):
+    global bot_running
+    command = request.command.lower()
+    with bot_state_lock:
+        if command == "stop":
+            bot_running = False
+            return {"status": "success", "message": "Bot đã được tạm dừng."}
+        elif command == "start":
+            bot_running = True
+            return {"status": "success", "message": "Bot đã được kích hoạt lại."}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid command. Use 'start' or 'stop'.")
