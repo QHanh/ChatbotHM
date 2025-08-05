@@ -108,9 +108,9 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
         if model_choice == "gemini":
             model = get_gemini_model()
             if model:
-              generation_config = GenerationConfig(response_mime_type="application/json")
-              response = model.generate_content(prompt, generation_config=generation_config)
-              response_text = response.text
+                generation_config = GenerationConfig(response_mime_type="application/json")
+                response = model.generate_content(prompt, generation_config=generation_config)
+                response_text = response.text
         elif model_choice == "lmstudio":
             response_text = get_lmstudio_response(prompt)
         elif model_choice == "openai":

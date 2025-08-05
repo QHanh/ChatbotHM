@@ -28,7 +28,7 @@ def _get_product_key(product: Dict) -> str:
 async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> ChatResponse:
     with bot_state_lock:
         if not bot_running:
-            return ChatResponse(reply="Bot is currently stopped.", history=[], human_handover_required=False)
+            return ChatResponse(reply="", history=[], human_handover_required=False)
     
     user_query = request.message
     model_choice = request.model_choice
@@ -539,6 +539,7 @@ def _process_images(wants_images: bool, retrieved_data: list, product_images_nam
                         break
             elif isinstance(image_data, str) and image_data.strip():
                 primary_image_url = image_data
+
             if primary_image_url:
                 images.append(ImageInfo(
                     product_name=product_data.get('product_name', ''),
@@ -557,5 +558,8 @@ async def power_off_bot_endpoint(request: ControlBotRequest):
         elif command == "start":
             bot_running = True
             return {"status": "success", "message": "Bot đã được kích hoạt lại."}
+        elif command == "status":
+            status_message = "Bot đang chạy" if bot_running else "Bot đã dừng"
+            return {"status": "info", "message": status_message}
         else:
             raise HTTPException(status_code=400, detail="Invalid command. Use 'start' or 'stop'.")

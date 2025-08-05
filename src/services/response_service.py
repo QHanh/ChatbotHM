@@ -37,8 +37,8 @@ def generate_llm_response(
         context += "Lịch sử hội thoại gần đây:\n(Đây là tin nhắn đầu tiên)\n"
 
     if needs_product_search:
-        if not search_results:
-            return {"answer": "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ.", "product_images": []} if wants_images else "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
+        # if not search_results:
+        #     return {"answer": "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ.", "product_images": []} if wants_images else "Dạ, em xin lỗi, cửa hàng em chưa kinh doanh sản phẩm này ạ."
 
         context += _build_product_context(search_results, include_specs)
 
@@ -198,7 +198,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - Dưới đây là lịch sử trò chuyện.
 
 ## NHIỆM VỤ (RẤT QUAN TRỌNG) ##
-- Trả lời câu hỏi của khách hàng: "{user_query}"
+- Trả lời câu hỏi của sau khách hàng: "{user_query}"
 - **BẠN PHẢI TRẢ LỜI DỰA TRÊN NGỮ CẢNH CỦA LỊCH SỬ HỘI THOẠI.**
 - **TUYỆT ĐỐI KHÔNG ĐƯỢC THAY ĐỔI CHỦ ĐỀ.** Ví dụ: nếu cuộc trò chuyện đang về "sản phẩm A", câu trả lời của bạn cũng phải về "sản phẩm A", không được tự ý chuyển sang "sản phẩm B".
 - Hãy trả lời một cách thân thiện và lễ phép.
@@ -209,9 +209,11 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 1.  **Sử dụng Emoji (Zalo):**
     - Để làm cho cuộc trò chuyện thân thiện hơn, hãy sử dụng các mã emoji sau một cách hợp lý.
     - **Danh sách mã emoji có thể dùng:** :d :( :~ :b :') 8-) :-(( :$ :3 :z :(( &-( :p :o :( ;-) --b :)) :-* ;-d /-showlove ;d ;o :--| 8* /-heart /-strong _()_ $-) /-break /-ok
-    - **Quy tắc:** Chỉ sử dụng 1-2 emoji trong một câu trả lời để thể hiện cảm xúc tích cực hoặc thân thiện. Ví dụ: "Dạ, bên em có sản phẩm này ạ :d", "Em cảm ơn anh/chị nhiều ạ /-heart". Không lạm dụng.
+    - **Quy tắc:** Chỉ sử dụng 1-2 emoji trong một câu trả lời để thể hiện cảm xúc tích cực hoặc thân thiện. Ví dụ: "Dạ, bên em có sản phẩm này ạ :d .", "Em cảm ơn anh/chị nhiều ạ /-heart .". Không lạm dụng. Lưu ý: **SAU EMOJI PHẢI CÓ MỘT KHOẢNG TRẮNG (SPACE)**.
 
 2.  {greeting_rule}
+
+3. Nếu khách hàng hỏi những từ hoặc câu bạn không hiểu hãy nói: "Dạ em không hiểu ý của anh/chị ạ."
 
 ## DỮ LIỆU CUNG CẤP ##
 {context}
@@ -286,7 +288,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 14.  **Sử dụng Emoji (Zalo):**
     - Để làm cho cuộc trò chuyện thân thiện hơn, hãy sử dụng các mã emoji sau một cách hợp lý.
     - **Danh sách mã emoji có thể dùng:** :d :( :~ :b :') 8-) :-(( :$ :3 :z :(( &-( :p :o :( ;-) --b :)) :-* ;-d /-showlove ;d ;o :--| 8* /-heart /-strong _()_ $-) /-break /-ok
-    - **Quy tắc:** Chỉ sử dụng 1-2 emoji trong một câu trả lời để thể hiện cảm xúc tích cực hoặc thân thiện. Ví dụ: "Dạ, bên em có sản phẩm này ạ :d", "Em cảm ơn anh/chị nhiều ạ /-heart". Không lạm dụng.
+    - **Quy tắc:** Chỉ sử dụng 1-2 emoji trong một câu trả lời để thể hiện cảm xúc tích cực hoặc thân thiện. Ví dụ: "Dạ, bên em có sản phẩm này ạ :d ", "Em cảm ơn anh/chị nhiều ạ /-heart ". Không lạm dụng. Lưu ý: **SAU EMOJI PHẢI CÓ MỘT KHOẢNG TRẮNG (SPACE)**.
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
@@ -340,7 +342,7 @@ def _get_fallback_response(search_results: List[Dict], needs_product_search: boo
     else:
         return "Dạ, em xin lỗi, em không hiểu rõ câu hỏi của anh/chị. Anh/chị có thể hỏi lại không ạ?"
     
-def evaluate_and_choose_product(user_query: str, history_text: str, product_candidates: List[Dict], requested_products: List[Dict], model_choice: str = "gemini") -> Dict:
+def evaluate_and_choose_product(user_query: str, history_text: str, product_candidates: List[Dict], model_choice: str = "gemini") -> Dict:
     """
     Sử dụng một lệnh gọi AI duy nhất để vừa đánh giá độ cụ thể của yêu cầu,
     vừa chọn ra sản phẩm phù hợp nhất nếu có thể.
