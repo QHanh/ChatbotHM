@@ -121,6 +121,8 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
                 product_context += f"  Tình trạng: Còn hàng ({inventory} sản phẩm)\n"
             else:
                 product_context += "  Tình trạng: Hết hàng\n"
+            link_product = item.get('link_product')
+            product_context += f"  Link sản phẩm: {link_product}\n"
         else:
             product_context += "  Lưu ý: Sản phẩm này có nhiều thuộc tính khác nhau (ví dụ: loại, cỡ, model, màu,...). Các phiên bản có sẵn:\n"
             for item in sorted_items:
@@ -129,7 +131,8 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
                 inventory = item.get('inventory', 0)
                 price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
                 stock_str = f"Còn hàng ({inventory})" if inventory > 0 else "Hết hàng"
-                product_context += f"    + {prop} - Giá: {price_str} - Tình trạng: {stock_str}\n"
+                link_product = item.get('link_product')
+                product_context += f"    + {prop} - Giá: {price_str} - Tình trạng: {stock_str} - Link sản phẩm: {link_product}\n"
 
         
         if include_specs:
@@ -206,14 +209,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
 ## QUY TẮC ##
 
-1.  **Sử dụng Emoji (Zalo):**
-    - Để làm cho cuộc trò chuyện thân thiện hơn, hãy sử dụng các mã emoji sau một cách hợp lý.
-    - **Danh sách mã emoji có thể dùng:** :d :( :~ :b :') 8-) :-(( :$ :3 :z :(( &-( :p :o :( ;-) --b :)) :-* ;-d /-showlove ;d ;o :--| 8* /-heart /-strong _()_ $-) /-break /-ok
-    - **Quy tắc:** Chỉ sử dụng 1-2 emoji trong một câu trả lời để thể hiện cảm xúc tích cực hoặc thân thiện. Ví dụ: "Dạ, bên em có sản phẩm này ạ :d .", "Em cảm ơn anh/chị nhiều ạ /-heart .". Không lạm dụng. Lưu ý: **SAU EMOJI PHẢI CÓ MỘT KHOẢNG TRẮNG (SPACE)**.
+1.  {greeting_rule}
 
-2.  {greeting_rule}
-
-3. Nếu khách hàng hỏi những từ hoặc câu bạn không hiểu hãy nói: "Dạ em không hiểu ý của anh/chị ạ."
+2. Nếu khách hàng hỏi những từ hoặc câu bạn không hiểu hãy nói: "Dạ em chưa hiểu ý của anh/chị ạ."
 
 ## DỮ LIỆU CUNG CẤP ##
 {context}
@@ -244,7 +242,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
 3.  **Lọc và giữ vững chủ đề (QUAN TRỌNG NHẤT):**
     - Phải xác định **chủ đề chính** của cuộc trò chuyện (ví dụ: "máy hàn", "kính hiển vi RELIFE").
-    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính, ví dụ khách hỏi về máy hàn Quick thì **không giới thiệu** máy khò Quick, tay hàn Quick, mũi hàn Quick.
+    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính, ví dụ khách hỏi về máy hàn Quick thì **KHÔNG LIỆT KÊ** các sản phẩm không phải máy hàn Quick như: máy khò Quick, tay hàn Quick, mũi hàn Quick.
     - Nếu khách hỏi một sản phẩm không có trong dữ liệu cung cấp, hãy trả lời rằng: "Dạ, bên em không bán 'tên_sản_phẩm_khách_hỏi' ạ."
 
 4.  **Sản phẩm có nhiều model, combo, cỡ, màu sắc,... (tùy thuộc tính):**
@@ -273,10 +271,12 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
 10.  **Xưng hô và Định dạng:**
     - Luôn xưng "em", gọi khách là "anh/chị".
+    - **KHÔNG NÊN** lạm dụng quá nhiều "anh/chị nhé", hãy thỉnh thoảng mới sử dụng để cho tự nhiên hơn.
     - KHÔNG dùng Markdown. Chỉ dùng text thuần.
 
 11.  **Link sản phẩm**
     - Bạn cứ gửi kèm link sản phẩm khi liệt kê các sản phẩm ra và chỉ cần gắn link vào cuối tên sản phẩm **không cần thêm gì hết**.
+    - Chỉ gửi kèm link các sản phẩm với các câu hỏi mà khách hàng yêu cầu liệt kê rõ về sản phẩm đó. **KHÔNG** gửi kèm với các câu hỏi chung chung ví dụ: "Có những loại máy hàn nào?".
 
 12.  **Với các câu hỏi bao quát khi khách hàng mới hỏi**
     - Ví dụ: "Shop bạn bán những mặt hàng gì", "Bên bạn có những sản phẩm gi?", hãy trả lời rằng: "Dạ, bên em chuyên kinh doanh các dụng cụ sửa chữa, thiết bị điện tử như máy hàn, kính hiển vi,... Anh/chị đang quan tâm mặt hàng nào để em tư vấn ạ."
@@ -284,11 +284,6 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 13.  **Xử lý lời đồng ý:**
     - Nếu bot ở lượt trước vừa hỏi một câu hỏi Yes/No để đề nghị cung cấp thông tin (ví dụ: "Anh/chị có muốn xem chi tiết không?") và câu hỏi mới nhất của khách là một lời đồng ý (ví dụ: "có", "vâng", "ok"), HÃY thực hiện hành động đã đề nghị.
     - Trong trường hợp này, hãy liệt kê các sản phẩm có trong "DỮ LIỆU CUNG CẤP" theo đúng định dạng danh sách.
-
-14.  **Sử dụng Emoji (Zalo):**
-    - Để làm cho cuộc trò chuyện thân thiện hơn, hãy sử dụng các mã emoji sau một cách hợp lý.
-    - **Danh sách mã emoji có thể dùng:** :d :( :~ :b :') 8-) :-(( :$ :3 :z :(( &-( :p :o :( ;-) --b :)) :-* ;-d /-showlove ;d ;o :--| 8* /-heart /-strong _()_ $-) /-break /-ok
-    - **Quy tắc:** Chỉ sử dụng 1-2 emoji trong một câu trả lời để thể hiện cảm xúc tích cực hoặc thân thiện. Ví dụ: "Dạ, bên em có sản phẩm này ạ :d ", "Em cảm ơn anh/chị nhiều ạ /-heart ". Không lạm dụng. Lưu ý: **SAU EMOJI PHẢI CÓ MỘT KHOẢNG TRẮNG (SPACE)**.
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
