@@ -5,18 +5,12 @@ import time
 
 from src.config.settings import APP_CONFIG, CORS_CONFIG
 from src.models.schemas import ChatRequest, ControlBotRequest
-from src.api.routes import (
-    chat_endpoint, 
-    control_bot_endpoint, 
-    human_chatting_endpoint,
-    power_off_bot_endpoint,
-    chat_history, 
-    chat_history_lock, 
-    HANDOVER_TIMEOUT
-)
+from src.api.routes import chat_endpoint, chat_history, chat_history_lock, HANDOVER_TIMEOUT, control_bot_endpoint, human_chatting_endpoint, power_off_bot_endpoint
 
+# Khởi tạo FastAPI app
 app = FastAPI(**APP_CONFIG)
 
+# Thêm CORS middleware
 app.add_middleware(CORSMiddleware, **CORS_CONFIG)
 
 def session_timeout_scanner():
@@ -74,12 +68,11 @@ async def control_bot(request: ControlBotRequest, session_id: str = Query(..., d
     """
     return await control_bot_endpoint(request, session_id)
 
-@app.post("/human-chatting/{session_id}", summary="Chuyển session sang trạng thái người chat")
-async def human_chatting(session_id: str):
+@app.post("/human-chatting", summary="Chuyển sang trạng thái human_chatting")
+async def human_chatting(session_id: str = Query(..., description="ID phiên chat")):
     """
-    Endpoint để chuyển một session sang trạng thái `human_chatting`.
-    Nếu session không tồn tại, một session mới sẽ được tạo.
-    - **session_id**: ID của phiên chat cần chuyển đổi.
+    Endpoint để chuyển sang trạng thái human_chatting.
+    - **session_id**: ID phiên chat cần chuyển sang trạng thái human_chatting.
     """
     return await human_chatting_endpoint(session_id)
 
@@ -93,4 +86,4 @@ async def power_off_bot(request: ControlBotRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("src.main:app", host="127.0.0.1", port=8111, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8008, reload=True)

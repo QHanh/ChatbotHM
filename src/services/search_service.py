@@ -21,7 +21,7 @@ def search_products(
     should_clauses = []
     filter_clauses = []
 
-    must_clauses.append({"match": {"product_name": {"query": product_name, "boost": 2.0}}})
+    must_clauses.append({"match": {"product_name": {"query": product_name, "boost": 1.5}}})
 
     should_clauses.append({"match": {"specifications": product_name}})
     if category:

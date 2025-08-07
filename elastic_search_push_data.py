@@ -81,7 +81,7 @@ def process_and_embed_data():
 
     actions = []
     total_rows = len(df)
-    API_ENDPOINT = "http://localhost:8000/embed"
+    API_ENDPOINT = "https://embed.doiquanai.vn/embed"
 
     for index, row in df.iterrows():
         print(f"Đang xử lý dòng {index + 1}/{total_rows}: {row['product_name']}")
