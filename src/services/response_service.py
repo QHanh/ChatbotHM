@@ -121,6 +121,8 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
                 product_context += f"  Tình trạng: Còn hàng ({inventory} sản phẩm)\n"
             else:
                 product_context += "  Tình trạng: Hết hàng\n"
+            guarantee = item.get('guarantee')
+            product_context += f"  Bảo hành: {guarantee}\n"
             link_product = item.get('link_product')
             product_context += f"  Link sản phẩm: {link_product}\n"
         else:
@@ -131,9 +133,12 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
                 inventory = item.get('inventory', 0)
                 price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
                 stock_str = f"Còn hàng ({inventory})" if inventory > 0 else "Hết hàng"
+                guarantee = item.get('guarantee')
+                product_context += f"  Bảo hành: {guarantee}\n"
                 link_product = item.get('link_product')
                 product_context += f"    + {prop} - Giá: {price_str} - Tình trạng: {stock_str} - Link sản phẩm: {link_product}\n"
-
+                # if include_specs:
+                #     product_context += f"  Mô tả: {item.get('specifications', 'N/A')}\n"
         
         if include_specs:
             product_context += f"  Mô tả: {sorted_items[0].get('specifications', 'N/A')}\n"
@@ -174,7 +179,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     store_info = """- Tên cửa hàng: Hoàng Mai Mobile
 - Địa chỉ: Số 8 ngõ 117 Thái Hà, Đống Đa, Hà Nội
 - Giờ làm việc: 8h00 - 18h00
-- Hotline: 0982153333"""
+- Hotline: 0982153333
+- Giá các sản phẩm chưa bao gồm VAT.
+- Có xuất hóa đơn điện tử."""
 
     greeting_rule = ""
     
@@ -196,7 +203,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     if not needs_product_search:
         return f"""## BỐI CẢNH ##
 - Bạn là một nhân viên tư vấn chuyên nghiệp của cửa hàng.
-- Thông tin cửa hàng:
+- Thông tin cố định về cửa hàng:
 {store_info}
 - Dưới đây là lịch sử trò chuyện.
 
@@ -221,17 +228,18 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
     return f"""## BỐI CẢNH ##
 - Bạn là một nhân viên tư vấn chuyên nghiệp, thông minh và khéo léo.
-- Dưới đây là lịch sử trò chuyện và dữ liệu về các sản phẩm liên quan.
+- **Thông tin cố định về cửa hàng (luôn ghi nhớ và sử dụng khi cần):**
+{store_info}
 
 ## NHIỆM VỤ ##
 - Phân tích ngữ cảnh và câu hỏi của khách hàng để trả lời một cách chính xác và tự nhiên như người thật.
 - **Ưu tiên hàng đầu: Luôn trả lời trực tiếp vào câu hỏi của khách hàng trước, sau đó mới áp dụng các quy tắc khác.**
 - TUYỆT ĐỐI chỉ sử dụng thông tin trong phần "DỮ LIỆU CUNG CẤP".
-- KHÔNG được trình bày các sản phẩm không phải câu hỏi của khách hàng. Ví dụ nếu khách hàng hỏi máy hàn thì chỉ liệt kê máy hàn, không liệt kê các sản phẩm khác máy hàn như máy khò, mũi hàn,...
 
 - **Câu hỏi của khách hàng**: "{user_query}"
 
 ## DỮ LIỆU CUNG CẤP ##
+- Dưới đây là lịch sử trò chuyện và dữ liệu về các sản phẩm liên quan.
 {context}
 
 {image_instruction}
@@ -244,7 +252,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
 3.  **Lọc và giữ vững chủ đề (QUAN TRỌNG NHẤT):**
     - Dựa vào lịch sử hội thoại, Phải xác định **chủ đề chính** của cuộc trò chuyện (ví dụ: "máy hàn", "kính hiển vi RELIFE").
-    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính, ví dụ khách hỏi về máy hàn Quick thì **KHÔNG LIỆT KÊ** các sản phẩm không phải **máy hàn** Quick như các phụ kiện của nó hay các sản phẩm cùng hãng: máy khò Quick, tay hàn Quick, mũi hàn Quick.
+    - **TUYỆT ĐỐI KHÔNG** giới thiệu sản phẩm không thuộc chủ đề chính.
     - Nếu khách hỏi một sản phẩm không có trong dữ liệu cung cấp, hãy trả lời rằng: "Dạ, bên em không bán 'tên_sản_phẩm_khách_hỏi' ạ."
 
 4.  **Sản phẩm có nhiều model, combo, cỡ, màu sắc,... (tùy thuộc tính):**
@@ -265,7 +273,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 
 8.  **Tồn kho:**
     - **KHÔNG** liệt kê các sản phẩm hoặc các phiên bản sản phẩm có "Tình trạng: Hết hàng".
-    - **KHÔNG** tự động nói ra số lượng tồn kho chính xác.
+    - **KHÔNG** tự động nói ra số lượng tồn kho chính xác hay tình trạng "Còn hàng". Chỉ nói khi khách hỏi.
     
 9.  **Giá sản phẩm:**
     - **Các sản phẩm có giá là **Liên hệ** thì **KHÔNG ĐƯỢC** nói ra giá, chỉ nói tên sản phẩm KHÔNG KÈM GIÁ.
@@ -287,6 +295,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 13.  **Xử lý lời đồng ý:**
     - Nếu bot ở lượt trước vừa hỏi một câu hỏi Yes/No để đề nghị cung cấp thông tin (ví dụ: "Anh/chị có muốn xem chi tiết không?") và câu hỏi mới nhất của khách là một lời đồng ý (ví dụ: "có", "vâng", "ok"), HÃY thực hiện hành động đã đề nghị.
     - Trong trường hợp này, hãy liệt kê các sản phẩm có trong "DỮ LIỆU CUNG CẤP" theo đúng định dạng danh sách.
+
+14. **Xử lý thông tin không có sẵn:**
+    - Nếu khách hàng hỏi về một thông tin không được cung cấp trong "BỐI CẢNH" hoặc "DỮ LIỆU CUNG CẤP" (ví dụ: phí ship, chứng từ,...), **TUYỆT ĐỐI KHÔNG ĐƯỢC BỊA RA**. Hãy trả lời một cách lịch sự rằng: "Dạ, về thông tin này em chưa rõ ạ, em sẽ liên hệ lại cho nhân viên tư vấn thêm cho mình sau nhé."
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
@@ -364,6 +375,7 @@ def evaluate_and_choose_product(user_query: str, history_text: str, product_cand
     Lưu ý:
     - Bạn sẽ trả về "GENERAL" nếu thấy ngữ cảnh lịch sử chat và yêu cầu của khách chưa đủ để phân biệt được sản phẩm cụ thể trong danh sách sản phẩm để chọn bên dưới. 
       Ví dụ: khách hỏi "bán cho mình chiếc kính hiển vi 2 mắt" và trong lịch sử chat cũng không thấy khách đang đề cập rõ đến loại hay brand nào, nhưng trong danh sách sản phẩm để chọn lại có 2 loại brand kính hiển vi 2 mắt khác nhau, cho nên chưa xác định được sản phẩm cụ thể nào được chọn.
+    - Bạn sẽ trả về "SPECIFIC" nếu thấy yêu cầu của khách hàng là rõ ràng có brand, model,... và có thể chọn được một sản phẩm cụ thể trong danh sách. Ví dụ: Kính hiển vi 3 mắt RF4 RF-6565Pro
 
     Hãy trả về kết quả dưới dạng JSON với cấu trúc: {{"type": "GENERAL" | "SPECIFIC", "index": SỐ_THỨ_TỰ | null}}
     - Nếu yêu cầu là "GENERAL", "index" sẽ là null.
@@ -400,3 +412,118 @@ def evaluate_and_choose_product(user_query: str, history_text: str, product_cand
 
     # Fallback an toàn
     return {'type': 'NONE', 'product': None}
+
+def evaluate_purchase_confirmation(user_query: str, history_text: str, model_choice: str = "gemini") -> Dict:
+    """
+    Sử dụng AI để đánh giá phản hồi của khách hàng khi được hỏi xác nhận đơn hàng.
+    Trả về một dictionary: {'decision': 'CONFIRM'/'CANCEL'/'UNCLEAR'}
+    """
+
+    prompt = f"""
+    Bạn là một AI chuyên phân tích ý định của khách hàng trong ngữ cảnh mua bán.
+    Bối cảnh: Bot vừa hỏi khách hàng để XÁC NHẬN việc đặt mua một sản phẩm cụ thể.
+
+    ## Bối cảnh hội thoại:
+    {history_text}
+    Bot vừa hỏi: "Dạ, em xác nhận anh/chị muốn đặt mua sản phẩm ... đúng không ạ?"
+    Khách hàng trả lời: "{user_query}"
+
+    ## Nhiệm vụ của bạn:
+    Phân tích câu trả lời của khách hàng và quyết định ý định của họ là "CONFIRM" (đồng ý mua), "CANCEL" (từ chối, hủy), hay "UNCLEAR" (không rõ ràng, hỏi sang chuyện khác).
+
+    - **CONFIRM:** Nếu khách dùng các từ như: "ok", "đúng rồi", "chốt", "lấy cho anh", "vâng", "dạ đúng ạ"...
+    - **CANCEL:** Nếu khách dùng các từ như: "không", "thôi", "hủy", "bỏ đi", "không mua nữa", "dạ không ạ"...
+    - **UNCLEAR:** Nếu khách hỏi một câu không liên quan (ví dụ: "shop có bán cái khác không?").
+
+    Hãy trả về kết quả dưới dạng JSON với cấu trúc sau:
+    {{"decision": "CONFIRM" | "CANCEL" | "UNCLEAR"}}
+
+    JSON kết quả:
+    """
+
+    try:
+        model = get_gemini_model()
+        if model:
+            # Sử dụng generation_config để đảm bảo đầu ra là JSON
+            from google.generativeai.types import GenerationConfig
+            generation_config = GenerationConfig(response_mime_type="application/json")
+            response = model.generate_content(prompt, generation_config=generation_config)
+            
+            data = json.loads(response.text)
+            decision = data.get("decision", "UNCLEAR").upper()
+
+            if decision in ["CONFIRM", "CANCEL"]:
+                print(f"AI đánh giá ý định xác nhận: {decision}")
+                return {'decision': decision}
+
+        # Nếu có lỗi hoặc không xác định được, coi như không rõ ràng
+        print("AI đánh giá ý định xác nhận: UNCLEAR")
+        return {'decision': 'UNCLEAR'}
+
+    except Exception as e:
+        print(f"Lỗi khi AI đánh giá xác nhận đơn hàng: {e}")
+        return {'decision': 'UNCLEAR'}
+
+def filter_products_with_ai(user_query: str, history_text: str, product_candidates: List[Dict]) -> List[Dict]:
+    """
+    Sử dụng AI để lọc và chọn ra những sản phẩm phù hợp nhất từ danh sách tìm kiếm.
+    """
+    # Nếu chỉ có 1 sản phẩm hoặc không có, không cần lọc
+    if not product_candidates or len(product_candidates) <= 1:
+        return product_candidates
+
+    prompt_list = ""
+    for i, product in enumerate(product_candidates):
+        name = product.get("product_name", "")
+        category = product.get("category", "")
+        props = product.get("properties", "")
+        full_name = f"{name} {category} ({props})" if props and str(props) != '0' else f"{name} {category}"
+        prompt_list += f"Sản phẩm {i}: {full_name}\n"
+
+    prompt = f"""
+    Bạn là một chuyên gia bán hàng thông thái. Nhiệm vụ của bạn là giúp nhân viên tư vấn chọn ra những sản phẩm phù hợp nhất để giới thiệu cho khách hàng.
+
+    ## Bối cảnh:
+    - Lịch sử hội thoại:
+    {history_text}
+    - Câu hỏi mới nhất của khách hàng: "{user_query}"
+
+    ## Danh sách sản phẩm tìm được (có thể chứa sản phẩm không liên quan):
+    {prompt_list}
+
+    ## Yêu cầu:
+    Dựa vào bối cảnh và câu hỏi của khách, hãy xem xét kỹ từng sản phẩm trong danh sách và chọn ra những sản phẩm **THỰC SỰ LIÊN QUAN** và hợp lý nhất để tư vấn.
+    - **Ví dụ:** Nếu khách hỏi "Box JC V1SE", bạn chỉ được chọn các sản phẩm có tên chính xác là "Box JC V1SE" hoặc các phiên bản/combo trực tiếp của nó. **TUYỆT ĐỐI KHÔNG** chọn các sản phẩm khác dù có chữ "Box" hoặc "JC".
+    - Nếu khách hỏi chung chung về "máy hàn", hãy ưu tiên các sản phẩm là "máy hàn", không chọn "phụ kiện máy hàn" trừ khi khách hỏi cụ thể.
+    - Với các sản phẩm là phụ kiện có trong dữ liệu, thì hãy dựa vào lịch sử hội thoại và câu hỏi của khách để quyết định có nên chọn hay không. Ví dụ: nếu khách hỏi về "mũi hàn Quick", bạn có thể chọn các mũi hàn Quick phù hợp, nhưng nếu khách chỉ hỏi về "máy hàn", thì không nên chọn mũi hàn.
+
+    Hãy trả về một đối tượng JSON chứa một key duy nhất là "indices", là một danh sách (list) các SỐ THỨ TỰ (index) của những sản phẩm bạn đã chọn.
+    Ví dụ: {{"indices": [0, 2, 5]}}
+    Nếu không có sản phẩm nào thực sự phù hợp, hãy trả về một danh sách rỗng: {{"indices": []}}
+
+    JSON kết quả:
+    """
+
+    try:
+        model = get_gemini_model()
+        if model:
+            from google.generativeai.types import GenerationConfig
+            generation_config = GenerationConfig(response_mime_type="application/json")
+            response = model.generate_content(prompt, generation_config=generation_config)
+            data = json.loads(response.text)
+            
+            indices = data.get("indices", [])
+            if not isinstance(indices, list):
+                return product_candidates # Nếu AI trả về sai định dạng, dùng lại list cũ
+
+            # Tạo danh sách sản phẩm mới dựa trên các index AI đã chọn
+            filtered_products = [product_candidates[i] for i in indices if 0 <= i < len(product_candidates)]
+            
+            print(f"AI đã lọc sản phẩm. Kết quả: {len(filtered_products)}/{len(product_candidates)} sản phẩm được chọn.")
+            return filtered_products
+
+    except Exception as e:
+        print(f"Lỗi khi AI lọc sản phẩm: {e}")
+
+    # Nếu có lỗi, trả về danh sách gốc để không làm gián đoạn cuộc trò chuyện
+    return product_candidates

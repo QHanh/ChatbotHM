@@ -11,7 +11,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     """
     history_text = ""
     if history:
-        for turn in history[-10:]:
+        for turn in history[-6:]:
             history_text += f"Khách: {turn['user']}\nBot: {turn['bot']}\n"
 
     # GỢI Ý: Đã tích hợp logic và ví dụ về category của bạn vào prompt này.
@@ -19,6 +19,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     Bạn là một AI phân tích truy vấn của khách hàng. Dựa vào lịch sử hội thoại và câu hỏi mới nhất, hãy phân tích và trả về một đối tượng JSON.
     QUAN TRỌNG: 
     - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
+    - **ƯU TIÊN CHỦ ĐỀ MỚI NHẤT (QUAN TRỌNG NHẤT):** Nếu khách hàng vừa thay đổi chủ đề (ví dụ: từ "kính hiển vi" sang "máy hàn") và bot đã xác nhận chủ đề mới đó, thì các câu hỏi tiếp theo của khách (ví dụ: "có những loại nào?", "giá bao nhiêu?") phải được phân tích theo chủ đề **MỚI NHẤT** ("máy hàn"). **TUYỆT ĐỐI KHÔNG** được kế thừa `search_params` từ chủ đề cũ.
     - **Kế thừa ý định:** Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước (ví dụ: bot hỏi 'muốn xem loại nào', 'muốn xem ảnh loại nào?', khách trả lời 'tất cả' hoặc 'gửi đi', 'ok'), hãy kế thừa ý định từ lượt trước đó. Nếu ý định trước đó cần tìm kiếm, thì `needs_search` phải là `true` và các `search_params` phải được suy ra từ ngữ cảnh.
     - Nếu câu hỏi của khách hàng quá ngắn, là một lời chào, lời cảm ơn, hoặc không rõ ràng về sản phẩm (ví dụ: "ok", "thanks", "ho", "hi", "uk"), hãy đặt "needs_search" là "false".
     - **Ưu tiên ý định thông tin:** Nếu khách hàng hỏi xin "ảnh", "thông số", thì `is_purchase_intent` PHẢI là `false`.
@@ -30,7 +31,8 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - **Ý định muốn biết thông tin cửa hàng:** Nếu khách hàng hỏi về địa chỉ, giờ làm việc, hoặc muốn đến mua trực tiếp, hãy đặt `wants_store_info` là `true`.
     - **Ý định gặp người thật (chat):** Chỉ đặt `wants_human_agent` là `true` khi khách hàng chắc chắn muốn nói chuyện, chat với nhân viên, người thật. Các câu hỏi như: "Bạn tên gì?" không là ý định muốn gặp người thật.
     - **Phân biệt:** "mua trực tiếp" là `wants_store_info`, "tư vấn trực tiếp" là `wants_human_agent`. Lưu ý: `wants_human_agent` là `true` thì `wants_store_info` phải là `false` và ngược lại.
-    
+    - Xác định đúng 'search_params' dựa trên ngữ cảnh câu hỏi và lịch sử hội thoại. Ví dụ: nếu khách hỏi "có máy hàn Quick 936A không", rồi sau đó hỏi "có loại tay cầm không", thì `search_params` phải là `"product_name": "máy hàn Quick 936A", "category": "Máy hàn", "properties": "tay cầm", "quantity": 1`.
+
     Lịch sử hội thoại gần đây:
     {history_text}
 

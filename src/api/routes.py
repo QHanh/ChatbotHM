@@ -12,9 +12,9 @@ from src.services.search_service import search_products, search_products_by_imag
 from src.services.response_service import generate_llm_response
 from src.utils.helpers import is_asking_for_more, format_history_text
 from src.config.settings import PAGE_SIZE
-from src.services.response_service import evaluate_and_choose_product
+from src.services.response_service import evaluate_and_choose_product, evaluate_purchase_confirmation, filter_products_with_ai
 import time
-HANDOVER_TIMEOUT = 600
+HANDOVER_TIMEOUT = 900
 
 chat_history: Dict[str, Dict[str, Any]] = {}
 chat_history_lock = threading.Lock()
@@ -112,8 +112,10 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
 
     if session_data.get("state") == "awaiting_purchase_confirmation":
-        affirmative_responses = ["đúng", "vâng", "ok", "đồng ý", "chốt", "uk", "uh", "ừ", "dạ", "um", "uhm", "ừm", "yes", "chuẩn", "vang", "da", "ừa"]
-        if any(word in user_query.lower() for word in affirmative_responses):
+        history_text = format_history_text(history, limit=4)
+        evaluation = evaluate_purchase_confirmation(user_query, history_text, model_choice)
+        decision = evaluation.get("decision")
+        if decision == "CONFIRM":
             collected_info = session_data.get("collected_customer_info", {})
             if collected_info.get("name") and collected_info.get("phone") and collected_info.get("address"):
                 
@@ -162,6 +164,12 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                 
                 _update_chat_history(session_id, user_query, response_text, session_data)
                 return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
+        elif decision == "CANCEL":
+            response_text = "Dạ, em đã hủy yêu cầu đặt mua sản phẩm, nếu anh/chị muốn mua sản phẩm khác thì báo lại cho em ạ. /-heart"
+            session_data["state"] = None
+            session_data["pending_purchase_item"] = None
+            _update_chat_history(session_id, user_query, response_text, session_data)
+            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
         else:
             session_data["state"] = None
             session_data["pending_purchase_item"] = None
@@ -291,7 +299,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         if not products:
             response_text = f"Dạ, em xin lỗi, bên em không có sản phẩm này ạ. :--|"
         else:
-            history_text = format_history_text(history, limit=5)
+            history_text = format_history_text(history, limit=6)
             evaluation = evaluate_and_choose_product(user_query, history_text, products, model_choice)
             
             request_type = evaluation.get("type")
@@ -313,7 +321,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                 elif requested_quantity > available_stock:
                     response_text = f"Dạ, em xin lỗi, sản phẩm {full_name} bên em chỉ còn {available_stock} sản phẩm ạ. Anh/chị có muốn lấy số lượng này không ạ? :b"
                 else:
-                    response_text = f"Dạ, em xác nhận anh/chị muốn đặt mua sản phẩm {full_name} (Số lượng: {requested_quantity}) đúng không ạ? :b"
+                    response_text = f"Dạ, anh/chị muốn đặt mua sản phẩm {full_name} (Số lượng: {requested_quantity}) đúng không ạ? :b"
                     session_data["state"] = "awaiting_purchase_confirmation"
                     session_data["pending_purchase_item"] = {
                         "product_data": product_to_check,
@@ -479,6 +487,10 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
             properties=search_params.get("properties", None),
             offset=0
         )
+
+        history_text = format_history_text(history, limit=4)
+        retrieved_data = filter_products_with_ai(user_query, history_text, retrieved_data)
+
         session_data["last_query"] = {
             "product_name": product_name_to_search,
             "category": search_params.get("category", user_query),
