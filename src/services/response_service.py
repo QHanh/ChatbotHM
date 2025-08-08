@@ -134,9 +134,8 @@ def _build_product_context(search_results: List[Dict], include_specs: bool = Fal
                 price_str = f"{price:,.0f}đ" if price > 0 else "Liên hệ"
                 stock_str = f"Còn hàng ({inventory})" if inventory > 0 else "Hết hàng"
                 guarantee = item.get('guarantee')
-                product_context += f"  Bảo hành: {guarantee}\n"
                 link_product = item.get('link_product')
-                product_context += f"    + {prop} - Giá: {price_str} - Tình trạng: {stock_str} - Link sản phẩm: {link_product}\n"
+                product_context += f"    + {prop} - Giá: {price_str} - Tình trạng: {stock_str} - Bảo hành: {guarantee} - Link sản phẩm: {link_product}\n"
                 # if include_specs:
                 #     product_context += f"  Mô tả: {item.get('specifications', 'N/A')}\n"
         
