@@ -243,8 +243,19 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
 
     if analysis_result.get("is_negative"):
         session_data["negativity_score"] += 1
-        if session_data["negativity_score"] >= 4:
-            analysis_result["wants_human_agent"] = True
+        if session_data["negativity_score"] >= 3:
+            response_text = "Dạ em đã thông báo lại với nhân viên phụ trách. Anh/chị đợi chút, nhân viên phụ trách bên em sẽ vào trả lời trực tiếp ngay ạ."
+            session_data["state"] = "human_calling"
+            session_data["handover_timestamp"] = time.time()
+            session_data["negativity_score"] = 0
+            _update_chat_history(session_id, user_query, response_text, session_data)
+            
+            return ChatResponse(
+                reply=response_text,
+                history=chat_history[session_id]["messages"].copy(),
+                human_handover_required=False,
+                has_negativity=True
+            )
 
     if analysis_result.get("wants_store_info"):
         response_text = "Dạ, anh/chị có thể đến xem và mua hàng trực tiếp tại cửa hàng Hoàng Mai Mobile ở địa chỉ:\n👉 Số 8 ngõ 117 Thái Hà, Phường Trung Liệt, Quận Đống Đa, Hà Nội.\n👉 SĐT: 0982153333\n👉 Link google map: https://maps.app.goo.gl/HM9RTi64wpC1GgFp8?g_st=ic"
