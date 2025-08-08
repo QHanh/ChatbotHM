@@ -47,7 +47,8 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             "pending_purchase_item": None,
             "negativity_score": 0,
             "handover_timestamp": None,
-            "collected_customer_info": {}
+            "collected_customer_info": {},
+            "has_past_purchase": False
         }).copy()
         history = session_data["messages"][-8:].copy()
 
@@ -140,6 +141,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                 
                 session_data["state"] = None
                 session_data["pending_purchase_item"] = None
+                session_data["has_past_purchase"] = True
                 
                 _update_chat_history(session_id, user_query, response_text, session_data)
                 
@@ -225,6 +227,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         response_text = "Dạ em đã nhận được thông tin. Em cảm ơn anh/chị! /-heart"
         session_data["state"] = None
         session_data["pending_purchase_item"] = None
+        session_data["has_past_purchase"] = True
         
         _update_chat_history(session_id, user_query, response_text, session_data)
         
@@ -261,6 +264,31 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             has_negativity=False,
             images=map_image,
             has_images=True
+        )
+    
+    # Xử lý ý định bảo hành sau mua
+    if analysis_result.get("wants_warranty_service"):
+        if session_data.get("has_past_purchase"):
+            response_text = "Dạ anh/chị đợi chút, nhân viên bảo hành bên em sẽ vào trả lời ngay ạ."
+            session_data["state"] = "human_calling"
+            session_data["handover_timestamp"] = time.time()
+            _update_chat_history(session_id, user_query, response_text, session_data)
+            return ChatResponse(
+                reply=response_text,
+                history=chat_history[session_id]["messages"].copy(),
+                human_handover_required=True,
+                has_negativity=False
+            )
+
+        response_text = "Dạ anh/chị đợi chút, nhân viên bảo hành bên em sẽ vào trả lời ngay ạ."
+        session_data["state"] = "human_calling"
+        session_data["handover_timestamp"] = time.time()
+        _update_chat_history(session_id, user_query, response_text, session_data)
+        return ChatResponse(
+            reply=response_text,
+            history=chat_history[session_id]["messages"].copy(),
+            human_handover_required=True,
+            has_negativity=False
         )
     
     if analysis_result.get("wants_human_agent"):
@@ -375,7 +403,8 @@ async def control_bot_endpoint(request: ControlBotRequest, session_id: str):
                 "pending_purchase_item": None,
                 "negativity_score": 0,
                 "handover_timestamp": None,
-                "collected_customer_info": {}
+                "collected_customer_info": {},
+                "has_past_purchase": False
             }
             print(f"Đã tạo session mới: {session_id} thông qua control endpoint.")
 
@@ -418,7 +447,8 @@ async def human_chatting_endpoint(session_id: str):
                 "pending_purchase_item": None,
                 "negativity_score": 0,
                 "handover_timestamp": None,
-                "collected_customer_info": {}
+                "collected_customer_info": {},
+                "has_past_purchase": False
             }
             message = f"Session {session_id} đã được tạo mới và chuyển sang trạng thái human_chatting."
             print(f"Đã tạo session mới: {session_id} thông qua human_chatting endpoint.")
@@ -527,6 +557,7 @@ def _update_chat_history(session_id: str, user_query: str, response_text: str, s
         current_session["negativity_score"] = session_data.get("negativity_score", 0)
         current_session["handover_timestamp"] = session_data.get("handover_timestamp")
         current_session["collected_customer_info"] = session_data.get("collected_customer_info", {})
+        current_session["has_past_purchase"] = session_data.get("has_past_purchase", False)
         chat_history[session_id] = current_session
 
 def _process_images(wants_images: bool, retrieved_data: list, product_images_names: list) -> list[ImageInfo]:

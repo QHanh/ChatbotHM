@@ -31,6 +31,8 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - **Ý định muốn biết thông tin cửa hàng:** Nếu khách hàng hỏi về địa chỉ, giờ làm việc, hoặc muốn đến mua trực tiếp, hãy đặt `wants_store_info` là `true`.
     - **Ý định gặp người thật (chat):** Chỉ đặt `wants_human_agent` là `true` khi khách hàng chắc chắn muốn nói chuyện, chat với nhân viên, người thật. Các câu hỏi như: "Bạn tên gì?" không là ý định muốn gặp người thật.
     - **Phân biệt:** "mua trực tiếp" là `wants_store_info`, "tư vấn trực tiếp" là `wants_human_agent`. Lưu ý: `wants_human_agent` là `true` thì `wants_store_info` phải là `false` và ngược lại.
+    - **Ý định bảo hành sau mua (`wants_warranty_service`=true):** Khi khách đã MUA HÀNG trước đó tại shop và hiện muốn bảo hành/đổi trả/sửa chữa (ví dụ: "máy em mua hôm trước bị lỗi", "cần bảo hành", "mang qua bảo hành giúp em", "máy hỏng cần đổi", "bị trục trặc sau khi mua"").
+      - Phân biệt với câu hỏi CHÍNH SÁCH bảo hành khi CHƯA mua (ví dụ: "sản phẩm này bảo hành mấy tháng", "chính sách bảo hành thế nào"): trường hợp này `wants_warranty_service` phải là `false` và xử lý như câu hỏi thông tin sản phẩm.
     - Xác định đúng 'search_params' dựa trên ngữ cảnh câu hỏi và lịch sử hội thoại. Ví dụ: nếu khách hỏi "có máy hàn Quick 936A không", rồi sau đó hỏi "có loại tay cầm không", thì `search_params` phải là `"product_name": "máy hàn Quick 936A", "category": "Máy hàn", "properties": "tay cầm", "quantity": 1`.
 
     Lịch sử hội thoại gần đây:
@@ -47,6 +49,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
       "wants_specs": <true nếu khách hỏi về "thông số", "chi tiết", "cấu hình", "xuất xứ", "nơi sản xuất", "khách hàng muốn so sánh các sản phẩm", ngược lại false>,
       "wants_human_agent": <true nếu khách muốn gặp người thật, ngược lại false>,
       "wants_store_info": <true nếu khách muốn biết địa chỉ, thời gian làm việc hoặc số hotline của cửa hàng>,
+      "wants_warranty_service": <true nếu khách đã mua trước đó và đang yêu cầu bảo hành/đổi trả/sửa chữa, ngược lại false>,
       "is_negative": <true nếu khách hàng có thái độ tiêu cực, ngược lại false>,
       "search_params": {{
         "product_name": "<Tên sản phẩm khách hàng đang đề cập bao gồm luôn cả tên thương hiệu và tên phụ kiện đi kèm>",
@@ -90,6 +93,12 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - Bối cảnh: Bot vừa hỏi "Dạ, mình muốn xem ảnh của loại tô vít 2UUL nào ạ?". Khách trả lời: "Tất cả"
       JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "tô vít 2UUL", "category": "tô vít", "properties": ""}}}}
 
+    - Câu hỏi: "Máy hàn em mua hôm trước bị lỗi, cần bảo hành"
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": true, "is_negative": false, "search_params": {{"product_name": "máy hàn", "category": "máy hàn", "properties": "", "quantity": 1 }}}}
+
+    - Câu hỏi: "Sản phẩm này bảo hành mấy tháng vậy?"
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": true, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": false, "is_negative": false, "search_params": {{"product_name": "sản phẩm này", "category": "sản phẩm", "properties": "", "quantity": 1 }}}}
+
     JSON của bạn:
     """
 
@@ -101,6 +110,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
         "wants_specs": "thông số" in user_query.lower(),
         "wants_human_agent": False,
         "wants_store_info": False,
+        "wants_warranty_service": False,
         "is_negative": False, 
         "search_params": { "product_name": user_query, "category": user_query, "properties": "", "quantity": 1 }
     }
