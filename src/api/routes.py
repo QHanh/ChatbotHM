@@ -529,7 +529,7 @@ def _handle_new_query(user_query: str, session_data: dict, history: list, model_
             offset=0
         )
 
-        history_text = format_history_text(history, limit=4)
+        history_text = format_history_text(history, limit=6)
         retrieved_data = filter_products_with_ai(user_query, history_text, retrieved_data)
 
         session_data["last_query"] = {

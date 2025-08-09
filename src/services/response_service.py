@@ -180,7 +180,9 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - Giờ làm việc: 8h00 - 18h00
 - Hotline: 0982153333
 - Giá các sản phẩm chưa bao gồm VAT.
-- Có xuất hóa đơn điện tử."""
+- Có xuất hóa đơn điện tử.
+- Chưa có xuất hóa đơn VAT.
+- Chưa có thông tin về chiết khấu."""
 
     greeting_rule = ""
     
@@ -296,7 +298,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
     - Trong trường hợp này, hãy liệt kê các sản phẩm có trong "DỮ LIỆU CUNG CẤP" theo đúng định dạng danh sách.
 
 14. **Xử lý thông tin không có sẵn:**
-    - Nếu khách hàng hỏi về một thông tin không được cung cấp trong "BỐI CẢNH" hoặc "DỮ LIỆU CUNG CẤP" (ví dụ: phí ship, chứng từ,...), **TUYỆT ĐỐI KHÔNG ĐƯỢC BỊA RA**. Hãy trả lời một cách lịch sự rằng: "Dạ, về thông tin này em chưa rõ ạ, em sẽ liên hệ lại cho nhân viên tư vấn thêm cho mình sau nhé."
+    - Nếu khách hàng hỏi về một thông tin không được cung cấp trong "BỐI CẢNH" hoặc "DỮ LIỆU CUNG CẤP" (ví dụ: phí ship, chứng từ, chiết khấu,...), thì **TUYỆT ĐỐI KHÔNG ĐƯỢC BỊA RA**. Hãy trả lời một cách lịch sự rằng: "Dạ, về thông tin này em chưa rõ ạ, em sẽ liên hệ lại cho nhân viên tư vấn để thông tin cho mình sau nhé."
 
 ## CÂU TRẢ LỜI CỦA BẠN: ##
 """
