@@ -496,6 +496,7 @@ def filter_products_with_ai(user_query: str, history_text: str, product_candidat
     Dựa vào bối cảnh và câu hỏi của khách, hãy xem xét kỹ từng sản phẩm trong danh sách và chọn ra những sản phẩm **THỰC SỰ LIÊN QUAN** và hợp lý nhất để tư vấn.
     - **Ví dụ:** Nếu khách hỏi "Box JC V1SE", bạn chỉ được chọn các sản phẩm có tên chính xác là "Box JC V1SE" hoặc các phiên bản/combo trực tiếp của nó. **TUYỆT ĐỐI KHÔNG** chọn các sản phẩm khác dù có chữ "Box" hoặc "JC".
     - Nếu khách hỏi chung chung về "máy hàn", hãy ưu tiên các sản phẩm là "máy hàn", không chọn "phụ kiện máy hàn" trừ khi khách hỏi cụ thể.
+    - Nếu khách hỏi về "tai nghe", hãy chỉ chọn các sản phẩm là tai nghe (earbuds, headphones). **TUYỆT ĐỐI KHÔNG** chọn các phụ kiện như đế kẹp, dụng cụ vệ sinh, cáp mic, trừ khi khách hàng hỏi cụ thể về các phụ kiện đó.
     - Với các sản phẩm là phụ kiện có trong dữ liệu, thì hãy dựa vào lịch sử hội thoại và câu hỏi của khách để quyết định có nên chọn hay không. Ví dụ: nếu khách hỏi về "mũi hàn Quick", bạn có thể chọn các mũi hàn Quick phù hợp, nhưng nếu khách chỉ hỏi về "máy hàn", thì không nên chọn mũi hàn.
 
     Hãy trả về một đối tượng JSON chứa một key duy nhất là "indices", là một danh sách (list) các SỐ THỨ TỰ (index) của những sản phẩm bạn đã chọn.

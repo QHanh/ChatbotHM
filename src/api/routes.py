@@ -482,6 +482,8 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         strict_properties=True,
         strict_category=True
     )
+    history_text = format_history_text(history, limit=6)
+    retrieved_data = filter_products_with_ai(user_query, history_text, retrieved_data)
 
     shown_keys = session_data["shown_product_keys"]
     new_products = [p for p in retrieved_data if _get_product_key(p) not in shown_keys]
