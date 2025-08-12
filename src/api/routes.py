@@ -280,7 +280,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     # Xử lý ý định bảo hành sau mua
     if analysis_result.get("wants_warranty_service"):
         if session_data.get("has_past_purchase"):
-            response_text = "Dạ anh/chị đợi chút, nhân viên bảo hành bên em sẽ vào trả lời ngay ạ."
+            response_text = "Dạ anh/chị đợi chút, nhân viên phụ trách bảo hành bên em sẽ vào trả lời ngay ạ."
             session_data["state"] = "human_calling"
             session_data["handover_timestamp"] = time.time()
             _update_chat_history(session_id, user_query, response_text, session_data)
@@ -291,7 +291,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
                 has_negativity=False
             )
 
-        response_text = "Dạ anh/chị đợi chút, nhân viên bảo hành bên em sẽ vào trả lời ngay ạ."
+        response_text = "Dạ anh/chị đợi chút, nhân viên phụ trách bảo hành bên em sẽ vào trả lời ngay ạ."
         session_data["state"] = "human_calling"
         session_data["handover_timestamp"] = time.time()
         _update_chat_history(session_id, user_query, response_text, session_data)
@@ -482,9 +482,10 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         strict_properties=True,
         strict_category=True
     )
+
     history_text = format_history_text(history, limit=6)
     retrieved_data = filter_products_with_ai(user_query, history_text, retrieved_data)
-
+    
     shown_keys = session_data["shown_product_keys"]
     new_products = [p for p in retrieved_data if _get_product_key(p) not in shown_keys]
 
@@ -492,6 +493,8 @@ def _handle_more_products(user_query: str, session_data: dict, history: list, mo
         response_text = "Dạ, hết rồi ạ."
         session_data["offset"] = new_offset
         return response_text, [], []
+
+
 
     for p in new_products:
         shown_keys.add(_get_product_key(p))
