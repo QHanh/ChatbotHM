@@ -1,7 +1,21 @@
-from elastic_search_push_data import es_client, INDEX_NAME
+import os
+from elasticsearch import Elasticsearch
 from src.config.settings import PAGE_SIZE
 
-# INDEX_NAME = "products_news"
+ELASTIC_HOST = os.environ.get("ELASTIC_HOST", "http://localhost:9200")
+# Bạn có thể muốn đưa INDEX_NAME vào biến môi trường hoặc file config
+INDEX_NAME = os.environ.get("ELASTIC_INDEX", "products_news")
+
+try:
+    es_client = Elasticsearch(hosts=[ELASTIC_HOST])
+    if not es_client.ping():
+        raise ConnectionError("Không thể kết nối đến Elasticsearch từ search_service.")
+except ConnectionError as e:
+    print(f"Lỗi kết nối trong search_service: {e}")
+    # Trong môi trường thực tế, bạn có thể muốn xử lý lỗi này một cách mềm dẻo hơn
+    # thay vì thoát hoàn toàn, ví dụ: thử kết nối lại.
+    es_client = None
+
 def search_products(
     product_name: str,
     category: str = None,
@@ -14,6 +28,10 @@ def search_products(
     Tìm kiếm sản phẩm trong Elasticsearch.
     Hỗ trợ tìm kiếm cân bằng, không quá rộng cũng không quá nghiêm ngặt.
     """
+    if not es_client:
+        print("Lỗi: es_client chưa được khởi tạo trong search_service.")
+        return []
+        
     if not category:
         category = product_name
 

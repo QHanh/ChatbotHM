@@ -15,9 +15,10 @@ load_dotenv()
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-ELASTIC_HOST = "http://localhost:9200"
-INDEX_NAME = "products_news_2807"
-XLSX_FILE_PATH = "dulieu_2807.xlsx"
+# Sử dụng biến môi trường cho ELASTIC_HOST, với giá trị mặc định là localhost
+ELASTIC_HOST = os.environ.get("ELASTIC_HOST", "http://localhost:9200")
+INDEX_NAME = "products_news"
+XLSX_FILE_PATH = "dulieu_1208.xlsx"
 
 try:
     es_client = Elasticsearch(hosts=[ELASTIC_HOST])
