@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   elasticsearch:
     image: elasticsearch:9.0.3
@@ -7,17 +6,53 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
       - "9200:9200"
     volumes:
       - esdata:/usr/share/elasticsearch/data
-    networks:
-      - chatbot_network
+    restart: unless-stopped
 
-networks:
-  chatbot_network:
-    driver: bridge
+  chatbot_api:
+    build: .
+    container_name: chatbot_api
+    depends_on:
+      - elasticsearch
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.chatbot_api.rule=Host(`chatbothm.doiquanai.vn`)"
+      - "traefik.http.routers.chatbot_api.entrypoints=websecure"
+      - "traefik.http.routers.chatbot_api.tls.certresolver=myresolver"
+      - "traefik.http.services.chatbot_api.loadbalancer.server.port=8008"
+    restart: unless-stopped
+
+  traefik:
+    image: "traefik:v3.1.2"
+    container_name: "traefik"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=doiquanai@gmail.com" 
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    restart: unless-stopped
 
 volumes:
   esdata:
+    name: chatbot_esdata
+    external: true
+  letsencrypt: {}
