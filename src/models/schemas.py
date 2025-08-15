@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Literal, Optional
 
 class ChatRequest(BaseModel):
@@ -7,7 +7,7 @@ class ChatRequest(BaseModel):
     image_url: Optional[str] = None
 
 class ControlBotRequest(BaseModel):
-    command: str
+    command: str = Field(..., description="Lệnh điều khiển bot, ví dụ: 'start', 'stop'")
 
 class ImageInfo(BaseModel):
     product_name: str
@@ -21,19 +21,24 @@ class PurchaseItem(BaseModel):
 
 class CustomerInfo(BaseModel):
     name: Optional[str] = None
-    address: Optional[str] = None
     phone: Optional[str] = None
-    items: List[PurchaseItem] = []
+    address: Optional[str] = None
+    items: List[PurchaseItem]
+
+class Action(BaseModel):
+    action: str
+    url: str
 
 class ChatResponse(BaseModel):
     reply: str
     history: List[Dict[str, str]]
     images: List[ImageInfo] = []
     has_images: bool = False
-    customer_info: Optional[CustomerInfo] = None
     has_purchase: bool = False
-    human_handover_required: bool = False,
-    has_negativity: bool = False
+    customer_info: Optional[CustomerInfo] = None
+    human_handover_required: Optional[bool] = False
+    has_negativity: Optional[bool] = False
+    action_data: Optional[Action] = None
 
 class QueryExtraction(BaseModel):
     product_name: str

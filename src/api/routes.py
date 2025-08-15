@@ -105,6 +105,13 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             print(f"Lỗi nghiêm trọng trong luồng xử lý ảnh: {e}")
             return ChatResponse(reply="Dạ, em xin lỗi, đã có lỗi xảy ra khi xem hình ảnh của mình ạ.", history=history)
     
+    analysis_result = analyze_intent_and_extract_entities(user_query, history, model_choice)
+
+    asking_for_more = is_asking_for_more(user_query)
+
+    retrieved_data, product_images = [], []
+    response_text = ""
+
     if user_query.strip().lower() == "/bot":
         session_data["state"] = None
         session_data["negativity_score"] = 0
@@ -129,8 +136,8 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             if collected_info.get("name") and collected_info.get("phone") and collected_info.get("address"):
                 purchase_items = []
                 for item in pending_items:
-                    item_data = item.get("product_data", {})
-                    quantity = item.get("quantity", 1)
+                    item_data = item.get("evaluation", {}).get("product", {})
+                    quantity = item.get("intent", {}).get("quantity", 1)
                     purchase_items.append(PurchaseItem(
                         product_name=item_data.get("product_name", "N/A"),
                         properties=item_data.get("properties"),
@@ -180,78 +187,91 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             session_data["state"] = None
             session_data["pending_purchase_item"] = None
 
-    if session_data.get("state") == "awaiting_customer_info":        
-        current_info = session_data.get("collected_customer_info", {})
-        extracted_info = extract_customer_info(user_query, model_choice)
-
-        for key, value in extracted_info.items():
-            if value and not current_info.get(key):
-                current_info[key] = value
-
-        missing_info = []
-        if not current_info.get("name"):
-            missing_info.append("tên")
-        if not current_info.get("phone"):
-            missing_info.append("số điện thoại")
-        if not current_info.get("address"):
-            missing_info.append("địa chỉ")
-
-        if missing_info:
-            response_text = f"Dạ, anh/chị vui lòng cho em xin { ' và '.join(missing_info) } để em lên đơn ạ."
-            session_data["collected_customer_info"] = current_info
-            _update_chat_history(session_id, user_query, response_text, session_data)
-            return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
-
-        if not missing_info:
-            pending_items = session_data.get("pending_purchase_item", [])
-            if not pending_items:
-                response_text = "Dạ, anh chị đợi chút, em chưa tìm thấy sản phẩm để đặt hàng ạ. Nhân viên phụ trách bên em sẽ vào trả lời ngay ạ."
-                session_data["state"] = "human_calling"
-                session_data["handover_timestamp"] = time.time()
+    if session_data.get("state") == "awaiting_customer_info":
+        if analysis_result.get("is_purchase_intent") or analysis_result.get("is_add_to_order_intent"):
+            new_products_from_intent = analysis_result.get("search_params", {}).get("products", [])
+            if new_products_from_intent:
+                existing_order_items = session_data.get("pending_purchase_item", [])
+                new_order_items = [{"intent": item, "status": "pending", "evaluation": None} for item in new_products_from_intent]
+                
+                session_data["pending_order"] = existing_order_items + new_order_items
                 session_data["state"] = None
+                session_data["pending_purchase_item"] = None
+                
+                # Fall through to re-process the purchase logic below
+            else:
+                # User wants to add, but didn't say what
+                response_text = "Dạ vâng, anh/chị muốn thêm sản phẩm nào vào đơn hàng ạ?"
                 _update_chat_history(session_id, user_query, response_text, session_data)
                 return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
+        else:
+            current_info = session_data.get("collected_customer_info", {})
+            extracted_info = extract_customer_info(user_query, model_choice)
 
-            purchase_items_obj = []
-            for item in pending_items:
-                item_data = item.get("product_data", {})
-                quantity = item.get("quantity", 1)
-                props_value = item_data.get("properties")
-                final_props = None
-                if props_value is not None and str(props_value).strip() not in ['0', '']:
-                    final_props = str(props_value)
+            for key, value in extracted_info.items():
+                if value and not current_info.get(key):
+                    current_info[key] = value
+
+            missing_info = []
+            if not current_info.get("name"):
+                missing_info.append("tên")
+            if not current_info.get("phone"):
+                missing_info.append("số điện thoại")
+            if not current_info.get("address"):
+                missing_info.append("địa chỉ")
+
+            if missing_info:
+                response_text = f"Dạ, anh/chị vui lòng cho em xin { ' và '.join(missing_info) } để em lên đơn ạ."
+                session_data["collected_customer_info"] = current_info
+                _update_chat_history(session_id, user_query, response_text, session_data)
+                return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy(), human_handover_required=False)
+
+            if not missing_info:
+                pending_items = session_data.get("pending_purchase_item", [])
+                if not pending_items:
+                    response_text = "Dạ, anh chị đợi chút, em chưa tìm thấy sản phẩm để đặt hàng ạ. Nhân viên phụ trách bên em sẽ vào trả lời ngay ạ."
+                    session_data["state"] = "human_calling"
+                    session_data["handover_timestamp"] = time.time()
+                    session_data["state"] = None
+                    _update_chat_history(session_id, user_query, response_text, session_data)
+                    return ChatResponse(reply=response_text, history=chat_history[session_id]["messages"].copy())
+
+                purchase_items_obj = []
+                for item in pending_items:
+                    item_data = item.get("evaluation", {}).get("product", {})
+                    quantity = item.get("intent", {}).get("quantity", 1)
+                    props_value = item_data.get("properties")
+                    final_props = None
+                    if props_value is not None and str(props_value).strip() not in ['0', '']:
+                        final_props = str(props_value)
+                    
+                    purchase_items_obj.append(PurchaseItem(
+                        product_name=item_data.get("product_name", "N/A"),
+                        properties=final_props,
+                        quantity=quantity
+                    ))
+
+                customer_info_obj = CustomerInfo(
+                    name=current_info.get("name"),
+                    phone=current_info.get("phone"),
+                    address=current_info.get("address"),
+                    items=purchase_items_obj
+                )
                 
-                purchase_items_obj.append(PurchaseItem(
-                    product_name=item_data.get("product_name", "N/A"),
-                    properties=final_props,
-                    quantity=quantity
-                ))
-
-            customer_info_obj = CustomerInfo(
-                name=current_info.get("name"),
-                phone=current_info.get("phone"),
-                address=current_info.get("address"),
-                items=purchase_items_obj
-            )
-            
-            response_text = "Dạ em đã nhận được đầy đủ thông tin. Em cảm ơn anh/chị! /-heart"
-            session_data["state"] = None
-            session_data["pending_purchase_item"] = None
-            session_data["has_past_purchase"] = True
-            
-            _update_chat_history(session_id, user_query, response_text, session_data)
-            
-            return ChatResponse(
-                reply=response_text,
-                history=chat_history[session_id]["messages"].copy(),
-                customer_info=customer_info_obj,
-                has_purchase=True,
-                human_handover_required=False
-            )
-
-    analysis_result = analyze_intent_and_extract_entities(user_query, history, model_choice)
-
-    asking_for_more = is_asking_for_more(user_query)
+                response_text = "Dạ em đã nhận được đầy đủ thông tin. Em cảm ơn anh/chị! /-heart"
+                session_data["state"] = None
+                session_data["pending_purchase_item"] = None
+                session_data["has_past_purchase"] = True
+                
+                _update_chat_history(session_id, user_query, response_text, session_data)
+                
+                return ChatResponse(
+                    reply=response_text,
+                    history=chat_history[session_id]["messages"].copy(),
+                    customer_info=customer_info_obj,
+                    has_purchase=True,
+                    human_handover_required=False
+                )
 
     retrieved_data, product_images = [], []
     response_text = ""
@@ -499,13 +519,7 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
             if not failed_items_list and confirmed_items:
                 session_data["state"] = "awaiting_purchase_confirmation"
                 
-                session_data["pending_purchase_item"] = [
-                    {
-                        "product_data": item['evaluation']['product'],
-                        "quantity": item['intent'].get('quantity', 1)
-                    }
-                    for item in confirmed_items
-                ]
+                session_data["pending_purchase_item"] = confirmed_items
                 response_parts.append("Anh/chị có muốn em lên đơn cho những sản phẩm này không ạ?")
                 session_data["pending_order"] = None
             
@@ -527,6 +541,15 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
     _update_chat_history(session_id, user_query, response_text, session_data)
     images = _process_images(analysis_result.get("wants_images", False), retrieved_data, product_images)
 
+    action_data = None
+    is_general_query = not analysis_result.get("is_purchase_intent") and session_data.get("state") is None
+    if is_general_query and len(retrieved_data) == 1:
+        product = retrieved_data[0]
+        product_link = product.get("link_product")
+        if product_link and isinstance(product_link, str) and product_link.startswith("http"):
+            action_data = {"action": "redirect", "url": product_link}
+
+
     return ChatResponse(
         reply=response_text,
         history=chat_history.get(session_id, {}).get("messages", []).copy(),
@@ -534,7 +557,8 @@ async def chat_endpoint(request: ChatRequest, session_id: str = "default") -> Ch
         has_images=len(images) > 0,
         has_purchase=analysis_result.get("is_purchase_intent", False),
         human_handover_required=analysis_result.get("human_handover_required", False),
-        has_negativity=False
+        has_negativity=False,
+        action_data=action_data
     )
 
 async def control_bot_endpoint(request: ControlBotRequest, session_id: str):
