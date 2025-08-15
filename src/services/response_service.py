@@ -182,7 +182,7 @@ def _build_prompt(user_query: str, context: str, needs_product_search: bool, wan
 - Giá các sản phẩm chưa bao gồm VAT.
 - Có xuất hóa đơn điện tử.
 - Chưa có xuất hóa đơn VAT.
-- Chưa có thông tin về chiết khấu."""
+- Chưa có thông tin chiết khấu."""
 
     greeting_rule = ""
     
@@ -356,10 +356,10 @@ def evaluate_and_choose_product(user_query: str, history_text: str, product_cand
     """
     Sử dụng một lệnh gọi AI duy nhất để vừa đánh giá độ cụ thể của yêu cầu,
     vừa chọn ra sản phẩm phù hợp nhất nếu có thể.
-    Trả về một dictionary: {'type': 'GENERAL'/'SPECIFIC'/'NONE', 'product': product_dict/None}
+    Trả về một dictionary: {'type': 'PERFECT_MATCH'/'CLOSE_MATCH'/'NO_MATCH', 'score': float, 'product': product_dict/None, 'reason': str/None}
     """
     if not product_candidates:
-        return {'type': 'NONE', 'product': None}
+        return {'type': 'NO_MATCH', 'score': 0.0, 'product': None, 'reason': None}
 
     prompt_list = ""
     for i, product in enumerate(product_candidates):
@@ -367,20 +367,39 @@ def evaluate_and_choose_product(user_query: str, history_text: str, product_cand
         props = product.get("properties", "")
         full_name = f"{name} ({props})" if props and str(props) != '0' else name
         prompt_list += f"{i}: {full_name}\n"
-
+    print("Danh sách các sản phẩm trước khi đánh giá:\n", prompt_list)
     prompt = f"""
-    Bạn là một AI chuyên phân tích và chọn lựa sản phẩm. Dựa vào lịch sử hội thoại, yêu cầu mua của khách hàng và danh sách sản phẩm, hãy thực hiện 2 nhiệm vụ sau:
-    1.  Đánh giá xem yêu cầu của khách là "GENERAL" (hỏi chung chung về một loại) hay "SPECIFIC" (chỉ đến một sản phẩm cụ thể).
-    2.  Nếu yêu cầu là "SPECIFIC", hãy chọn ra sản phẩm phù hợp nhất.
+    Bạn là một AI chuyên phân tích và chọn lựa sản phẩm. Dựa vào yêu cầu của khách hàng và danh sách sản phẩm, hãy thực hiện các nhiệm vụ sau:
+    1. Phân tích yêu cầu của khách và danh sách sản phẩm.
+    2. Quyết định xem có sản phẩm nào là "PERFECT_MATCH" (khớp hoàn toàn), "CLOSE_MATCH" (khớp loại sản phẩm nhưng sai model/thuộc tính phụ), hay "NO_MATCH" (không liên quan).
 
-    Lưu ý:
-    - Bạn sẽ trả về "GENERAL" nếu thấy ngữ cảnh lịch sử chat và yêu cầu của khách chưa đủ để phân biệt được sản phẩm cụ thể trong danh sách sản phẩm để chọn bên dưới. 
-      Ví dụ: khách hỏi "bán cho mình chiếc kính hiển vi 2 mắt" và trong lịch sử chat cũng không thấy khách đang đề cập rõ đến loại hay brand nào, nhưng trong danh sách sản phẩm để chọn lại có 2 loại brand kính hiển vi 2 mắt khác nhau, cho nên chưa xác định được sản phẩm cụ thể nào được chọn.
-    - Bạn sẽ trả về "SPECIFIC" nếu thấy yêu cầu của khách hàng là rõ ràng có brand, model,... và có thể chọn được một sản phẩm cụ thể trong danh sách. Ví dụ: Kính hiển vi 3 mắt RF4 RF-6565Pro
+    ## Định nghĩa các loại khớp:
+    - **PERFECT_MATCH:** Tên, model, và các thuộc tính quan trọng trong yêu cầu của khách khớp chính xác với sản phẩm. Nhưng khi họ đưa thiếu thuộc tính phụ mà sản phẩm đó trong danh sách chỉ có một thuộc tính phụ thì hãy coi đó là PERFECT_MATCH.
+    - **CLOSE_MATCH:** Loại sản phẩm chính khớp (ví dụ: cùng là "khay sim") nhưng model hoặc phiên bản lại khác (ví dụ: khách hỏi "cho iPhone 12 Pro Max" nhưng sản phẩm trong danh sách là "cho iPhone 12").
+    - **NO_MATCH:** Sản phẩm hoàn toàn không liên quan hoặc không có sản phẩm nào trong danh sách đáp ứng được yêu cầu cơ bản của khách.
 
-    Hãy trả về kết quả dưới dạng JSON với cấu trúc: {{"type": "GENERAL" | "SPECIFIC", "index": SỐ_THỨ_TỰ | null}}
-    - Nếu yêu cầu là "GENERAL", "index" sẽ là null.
-    - Nếu không có sản phẩm nào phù hợp, hãy trả về {{"type": "NONE", "index": null}}
+    ## QUY TẮC SUY LUẬN THÔNG MINH ##
+    - Nếu khách hàng yêu cầu một thuộc tính chung (ví dụ: màu "vàng"), và trong danh sách sản phẩm chỉ có duy nhất một biến thể của thuộc tính đó cho dòng sản phẩm liên quan (ví dụ: chỉ có màu "vàng đồng" cho iPhone 12 Pro Max), HÃY tự động coi đó là sản phẩm khách muốn và trả về "PERFECT_MATCH".
+    - Quy tắc này chỉ áp dụng khi chỉ có MỘT lựa chọn hợp lý duy nhất. Nếu có cả "vàng đồng" và "vàng gold", hãy trả về "CLOSE_MATCH" và hỏi lại khách.
+
+    ## QUY TẮC ƯU TIÊN: XỬ LÝ LỜI ĐỒNG Ý SAU KHI GỢI Ý ##
+    - Nếu tin nhắn gần nhất của bot là một lời GỢI Ý các sản phẩm tương tự (ví dụ: bắt đầu bằng "Em chưa tìm thấy chính xác..."), và tin nhắn mới nhất của khách hàng là một lời ĐỒNG Ý hoặc CHẤP NHẬN các sản phẩm được gợi ý (ví dụ: "ok", "lấy màu đó đi", "vậy lấy 2 màu đó"), HÃY coi đó là một PERFECT_MATCH.
+    - Trong trường hợp này, hãy chọn sản phẩm trong danh sách khớp với gợi ý mà khách hàng vừa đồng ý, và trả về type: "PERFECT_MATCH" và score: 1.0.
+
+    ## Quy tắc trả về:
+    - Hãy trả về kết quả dưới dạng một đối tượng JSON duy nhất.
+    - Cấu trúc JSON: {{"type": "PERFECT_MATCH" | "CLOSE_MATCH" | "NO_MATCH", "score": ĐIỂM_SỐ (0.0 đến 1.0), "index": SỐ_THỨ_TỰ | null, "reason": "Lý do không khớp (nếu có)" | null}}
+    - score: Bắt buộc. Chấm điểm độ phù hợp từ 0.0 (không liên quan) đến 1.0 (khớp hoàn hảo).
+        - PERFECT_MATCH: score phải là 1.0.
+        - NO_MATCH: score phải là 0.0.
+        - CLOSE_MATCH: score phải > 0.0 và < 1.0. Chấm điểm cao hơn cho các lỗi nhỏ (sai màu, thiếu phụ kiện) và thấp hơn cho các lỗi lớn (sai model sản phẩm).
+    - Nếu `type` là "CLOSE_MATCH", trường "reason" là **bắt buộc**. **Lý do phải được viết như một nhân viên đang giải thích cho khách hàng**, ngắn gọn và lịch sự.
+    - **Ví dụ cho `reason`**:
+        - "sản phẩm này chỉ dành cho iPhone 12, khác với dòng 12 Pro Max của anh/chị ạ."
+        - "sản phẩm này chỉ là khay sim, không phải full bộ kèm ổ sim như anh/chị tìm ạ."
+        - "em chỉ tìm thấy màu vàng đồng, không có màu vàng gold như anh/chị yêu cầu ạ."
+    - Nếu `type` là "PERFECT_MATCH" hoặc "NO_MATCH", "reason" sẽ là null.
+    - Nếu không có sản phẩm nào phù hợp, hãy trả về {{"type": "NO_MATCH", "index": null, "reason": null}}
 
     Lịch sử hội thoại:
     {history_text}
@@ -398,21 +417,27 @@ def evaluate_and_choose_product(user_query: str, history_text: str, product_cand
             json_text = re.search(r'\{.*\}', response.text, re.DOTALL).group(0)
             data = json.loads(json_text)
             
-            request_type = data.get("type", "NONE")
+            request_type = data.get("type", "NO_MATCH").upper()
+            score = data.get("score", 0.0)
             index = data.get("index")
+            reason = data.get("reason")
 
-            if request_type == "SPECIFIC" and index is not None and 0 <= index < len(product_candidates):
-                print(f"AI đánh giá: SPECIFIC, chọn index: {index}")
-                return {'type': 'SPECIFIC', 'product': product_candidates[index]}
+            product = None
+            if index is not None and 0 <= index < len(product_candidates):
+                product = product_candidates[index]
+
+            print(f"AI đánh giá: {request_type}, score: {score}, chọn index: {index}, lý do: {reason}")
             
-            print(f"AI đánh giá: {request_type}")
-            return {'type': request_type, 'product': None}
+            if request_type in ["PERFECT_MATCH", "CLOSE_MATCH"] and product:
+                 return {'type': request_type, 'score': score, 'product': product, 'reason': reason}
+
+            return {'type': 'NO_MATCH', 'score': 0.0, 'product': None, 'reason': None}
 
     except Exception as e:
         print(f"Lỗi khi AI đánh giá và chọn sản phẩm: {e}")
 
     # Fallback an toàn
-    return {'type': 'NONE', 'product': None}
+    return {'type': 'NO_MATCH', 'score': 0.0, 'product': None, 'reason': None}
 
 def evaluate_purchase_confirmation(user_query: str, history_text: str, model_choice: str = "gemini") -> Dict:
     """
@@ -481,6 +506,7 @@ def filter_products_with_ai(user_query: str, history_text: str, product_candidat
         full_name = f"{name} {category} ({props})" if props and str(props) != '0' else f"{name} {category}"
         prompt_list += f"Sản phẩm {i}: {full_name}\n"
 
+    print("Danh sách các sản phẩm trước khi lọc:\n", prompt_list)
     prompt = f"""
     Bạn là một chuyên gia bán hàng thông thái. Nhiệm vụ của bạn là giúp nhân viên tư vấn chọn ra những sản phẩm phù hợp nhất để giới thiệu cho khách hàng.
 
@@ -493,10 +519,18 @@ def filter_products_with_ai(user_query: str, history_text: str, product_candidat
     {prompt_list}
 
     ## Yêu cầu:
+    **QUY TẮC SỐ 1: ƯU TIÊN KHỚP CHÍNH XÁC.**
+    - Nếu tên sản phẩm trong câu hỏi của khách khớp **chính xác hoặc gần như chính xác** với một hoặc nhiều sản phẩm trong danh sách, bạn **BẮT BUỘC CHỈ CHỌN** những sản phẩm đó và loại bỏ tất cả những sản phẩm khác.
+    - Ví dụ: Khách hỏi "sản phẩm X". Trong danh sách có "Sản phẩm 0: sản phẩm X" và "Sản phẩm 1: sản phẩm Y". Bạn BẮT BUỘC chỉ được trả về `{{"indices": [0]}}`.
+
+    **QUY TẮC QUAN TRỌNG NHẤT: BÁM SÁT LOẠI SẢN PHẨM CỐT LÕI.**
+    - Phải xác định **loại sản phẩm cốt lõi** mà khách hàng đang hỏi (ví dụ: "kính hiển vi", "máy hàn", "tô vít").
+    - **TUYỆT ĐỐI KHÔNG** chọn các sản phẩm là **phụ kiện** hoặc **bộ phận thay thế** nếu khách hàng đang hỏi về sản phẩm chính.
+    - **VÍ DỤ NGUY HIỂM:** Nếu khách hỏi "kính hiển vi Maant", bạn chỉ được chọn sản phẩm là "KÍNH HIỂN VI". **TUYỆT ĐỐI KHÔNG** được chọn "ĐÈN kính hiển vi", "ỐNG NGẮM kính hiển vi", hay "CHÂN ĐẾ kính hiển vi". Tương tự, nếu khách hỏi "máy hàn", không được chọn "mũi hàn".
+    - Chỉ chọn phụ kiện khi khách hỏi **trực tiếp** về phụ kiện đó (ví dụ: "có đèn cho kính hiển vi không?").
+
     Dựa vào bối cảnh và câu hỏi của khách, hãy xem xét kỹ từng sản phẩm trong danh sách và chọn ra những sản phẩm **THỰC SỰ LIÊN QUAN** và hợp lý nhất để tư vấn.
     - **Ví dụ:** Nếu khách hỏi "Box JC V1SE", bạn chỉ được chọn các sản phẩm có tên chính xác là "Box JC V1SE" hoặc các phiên bản/combo trực tiếp của nó. **TUYỆT ĐỐI KHÔNG** chọn các sản phẩm khác dù có chữ "Box" hoặc "JC".
-    - Nếu khách hỏi chung chung về "máy hàn", hãy ưu tiên các sản phẩm là "máy hàn", không chọn "phụ kiện máy hàn" trừ khi khách hỏi cụ thể.
-    - Với các sản phẩm là phụ kiện có trong dữ liệu, thì hãy dựa vào lịch sử hội thoại và câu hỏi của khách để quyết định có nên chọn hay không. Ví dụ: nếu khách hỏi về "mũi hàn Quick", bạn có thể chọn các mũi hàn Quick phù hợp, nhưng nếu khách chỉ hỏi về "máy hàn", thì không nên chọn mũi hàn.
 
     ## Quy tắc quan trọng chung cho tất cả sản phẩm:
     - **KHÔNG** chọn các sản phẩm không liên quan với câu hỏi của khách. Hãy trả ra các kết quả rỗng nếu không có sản phẩm khách tìm. Ví dụ: khách hỏi "tai nghe", nếu không có tai nghe thì trả ra rỗng, không trả ra các sản phẩm như đế tai nghe, dụng cụ vệ sinh tai nghe,...
@@ -520,6 +554,12 @@ def filter_products_with_ai(user_query: str, history_text: str, product_candidat
             if not isinstance(indices, list):
                 return product_candidates
 
+            # Nếu AI không chọn được sản phẩm nào phù hợp, trả về danh sách rỗng.
+            if not indices:
+                print("AI không chọn sản phẩm nào. Trả về danh sách rỗng.")
+                return []
+
+            # Tạo danh sách sản phẩm mới dựa trên các index AI đã chọn
             filtered_products = [product_candidates[i] for i in indices if 0 <= i < len(product_candidates)]
             
             print(f"AI đã lọc sản phẩm. Kết quả: {len(filtered_products)}/{len(product_candidates)} sản phẩm được chọn.")

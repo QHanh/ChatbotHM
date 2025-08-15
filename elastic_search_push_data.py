@@ -189,12 +189,12 @@ def update_inventory_and_price():
 
 if __name__ == "__main__":
     # --- Chạy lần đầu ---
-    # print("Bắt đầu quá trình tạo index và đẩy dữ liệu mới...")
-    # create_index_with_embedding_mapping()
-    # process_and_embed_data()
-    # print("\nQuá trình xử lý và index dữ liệu ban đầu đã hoàn tất.")
+    print("Bắt đầu quá trình tạo index và đẩy dữ liệu mới...")
+    create_index_with_embedding_mapping()
+    process_and_embed_data()
+    print("\nQuá trình xử lý và index dữ liệu ban đầu đã hoàn tất.")
 
     # --- Cập nhật hàng ngày ---
-    print("Bắt đầu quá trình cập nhật giá và tồn kho...")
-    update_inventory_and_price()
-    print("\nQuá trình cập nhật đã hoàn tất.")
+    # print("Bắt đầu quá trình cập nhật giá và tồn kho...")
+    # update_inventory_and_price()
+    # print("\nQuá trình cập nhật đã hoàn tất.")

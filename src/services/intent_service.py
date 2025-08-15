@@ -17,7 +17,8 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     # GỢI Ý: Đã tích hợp logic và ví dụ về category của bạn vào prompt này.
     prompt = f"""
     Bạn là một AI phân tích truy vấn của khách hàng. Dựa vào lịch sử hội thoại và câu hỏi mới nhất, hãy phân tích và trả về một đối tượng JSON.
-    QUAN TRỌNG: 
+    QUAN TRỌNG:
+    - **ƯU TIÊN PHÂN TÍCH NHIỀU SẢN PHẨM:** Nếu khách hàng đề cập đến nhiều sản phẩm (ví dụ: "lấy cho anh 1 cái A và 2 cái B"), bạn PHẢI trích xuất tất cả vào danh sách `products`.
     - Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước, hãy kế thừa ý định từ lượt trước đó.
     - **ƯU TIÊN CHỦ ĐỀ MỚI NHẤT (QUAN TRỌNG NHẤT):** Nếu khách hàng vừa thay đổi chủ đề (ví dụ: từ "kính hiển vi" sang "máy hàn") và bot đã xác nhận chủ đề mới đó, thì các câu hỏi tiếp theo của khách (ví dụ: "có những loại nào?", "giá bao nhiêu?") phải được phân tích theo chủ đề **MỚI NHẤT** ("máy hàn"). **TUYỆT ĐỐI KHÔNG** được kế thừa `search_params` từ chủ đề cũ.
     - **Kế thừa ý định:** Khi câu hỏi của khách hàng là một câu trả lời ngắn gọn cho câu hỏi của bot ở lượt trước (ví dụ: bot hỏi 'muốn xem loại nào', 'muốn xem ảnh loại nào?', khách trả lời 'tất cả' hoặc 'gửi đi', 'ok'), hãy kế thừa ý định từ lượt trước đó. Nếu ý định trước đó cần tìm kiếm, thì `needs_search` phải là `true` và các `search_params` phải được suy ra từ ngữ cảnh.
@@ -33,7 +34,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
     - **Phân biệt:** "mua trực tiếp" là `wants_store_info`, "tư vấn trực tiếp" là `wants_human_agent`. Lưu ý: `wants_human_agent` là `true` thì `wants_store_info` phải là `false` và ngược lại.
     - **Ý định bảo hành sau mua (`wants_warranty_service`=true):** Khi khách đã MUA HÀNG trước đó tại shop và hiện muốn bảo hành/đổi trả/sửa chữa (ví dụ: "máy em mua hôm trước bị lỗi", "cần bảo hành", "mang qua bảo hành giúp em", "máy hỏng cần đổi", "bị trục trặc sau khi mua"").
       - Phân biệt với câu hỏi CHÍNH SÁCH bảo hành khi CHƯA mua (ví dụ: "sản phẩm này bảo hành mấy tháng", "chính sách bảo hành thế nào"): trường hợp này `wants_warranty_service` phải là `false` và xử lý như câu hỏi thông tin sản phẩm.
-    - Xác định đúng 'search_params' dựa trên ngữ cảnh câu hỏi và lịch sử hội thoại. Ví dụ: nếu khách hỏi "có máy hàn Quick 936A không", rồi sau đó hỏi "có loại tay cầm không", thì `search_params` phải là `"product_name": "máy hàn Quick 936A", "category": "Máy hàn", "properties": "tay cầm", "quantity": 1`.
+    - **Ý định chuyển khoản:** Nếu khách hàng hỏi "cho xin stk", "chuyển khoản", "banking", "số tài khoản ngân hàng", đặt `is_bank_transfer` là `true`.
 
     Lịch sử hội thoại gần đây:
     {history_text}
@@ -51,54 +52,64 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
       "wants_store_info": <true nếu khách muốn biết địa chỉ, thời gian làm việc hoặc số hotline của cửa hàng>,
       "wants_warranty_service": <true nếu khách đã mua trước đó và đang yêu cầu bảo hành/đổi trả/sửa chữa, ngược lại false>,
       "is_negative": <true nếu khách hàng có thái độ tiêu cực, ngược lại false>,
+      "is_bank_transfer": <true nếu khách hàng đề cập đến việc chuyển khoản ngân hàng, ngược lại false>,
       "search_params": {{
-        "product_name": "<Tên sản phẩm khách hàng đang đề cập bao gồm luôn cả tên thương hiệu và tên phụ kiện đi kèm>",
-        "category": "<Danh mục sản phẩm. Quy tắc: Nếu khách hỏi 'đèn kính hiển vi', category là 'đèn'. Nếu khách hỏi 'kính hiển vi', category là 'kính hiển vi'. Nếu khách hỏi 'kính hiển vi 2 mắt', category là 'kính hiển vi 2 mắt'. Nếu không thể xác định, hãy để category giống product_name.>",
-        "properties": "<Các thuộc tính cụ thể như model, màu sắc, loại, combo,... Lưu ý: Tên thương hiệu không phải thuộc tính, ví dụ: máy hàn GVM T210S, GVM H3 thì properties là ''(**không có thuộc tính**). Thuộc tính **chỉ có** khi khách đề cập rõ màu sắc, MODEL, hoặc loại cụ thể.>",
-        "quantity": <Số lượng, mặc định là 1>
+        "products": [
+            {{
+                "product_name": "<Tên sản phẩm khách hàng đang đề cập bao gồm luôn cả tên thương hiệu và tên phụ kiện đi kèm>",
+                "category": "<Danh mục sản phẩm. Quy tắc: Nếu khách hỏi 'đèn kính hiển vi', category là 'đèn'. Nếu khách hỏi 'kính hiển vi', category là 'kính hiển vi'. Nếu khách hỏi 'kính hiển vi 2 mắt', category là 'kính hiển vi 2 mắt'. Nếu không thể xác định, hãy để category giống product_name.>",
+                "properties": "<Các thuộc tính cụ thể như model, màu sắc, loại, combo,... Lưu ý: Tên thương hiệu không phải thuộc tính, ví dụ: máy hàn GVM T210S, GVM H3 thì properties là ''(**không có thuộc tính**). Thuộc tính **chỉ có** khi khách đề cập rõ màu sắc, MODEL, hoặc loại cụ thể.>",
+                "quantity": <Số lượng, mặc định là 1>
+            }}
+        ]
       }}
     }}
 
     Ví dụ:
     - Câu hỏi: "shop có đèn kính hiển vi không"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": "", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, ..., "search_params": {{"products": [{{"product_name": "đèn kính hiển vi", "category": "đèn", "properties": "", "quantity": 1}}]}}}}
 
     - Câu hỏi: "shop có kính hiển vi 2 mắt màu xanh không"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": [{{"product_name": "kính hiển vi 2 mắt", "category": "kính hiển vi 2 mắt", "properties": "màu xanh", "quantity": 1}}]}}}}
   
     - Câu hỏi: "cho xem ảnh máy khò kaisi model 8512p"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": [{{"product_name": "máy khò kaisi", "category": "Máy khò", "properties": "MODEL:8512P", "quantity": 1}}]}}}}
 
     - Câu hỏi: "có máy hàn dùng mũi C210 không"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": "", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": [{{"product_name": "máy hàn dùng mũi C210", "category": "Máy hàn", "properties": "", "quantity": 1}}]}}}}
 
     - Câu hỏi: "cho mình xin ảnh cái máy hàn GVM T210S và máy hàn GVM H3"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "máy hàn GVM T210s H3", "category": "máy hàn", "properties": "", "quantity": 1}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "wants_images": true, ..., "search_params": {{"products": [{{"product_name": "máy hàn GVM T210S", "category": "máy hàn", "properties": "", "quantity": 1}}, {{"product_name": "máy hàn GVM H3", "category": "máy hàn", "properties": "", "quantity": 1}}]}}}}
     
     - Câu hỏi: "cho chị loại M6T màu xanh nhé"
-      JSON: {{"needs_search": false, "is_purchase_intent": true, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "kính hiển vi M6T", "category": "kính hiển vi", "properties": "màu xanh", "quantity": 1 }}}}
+      JSON: {{"needs_search": false, "is_purchase_intent": true, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": [{{"product_name": "kính hiển vi M6T", "category": "kính hiển vi", "properties": "màu xanh", "quantity": 1 }}]}}}}
+
+    - Câu hỏi: "lấy cho anh 2 cái tô vít 2UUL và 1 khò Quick 861DW"
+      JSON: {{"needs_search": false, "is_purchase_intent": true, ..., "search_params": {{"products": [{{"product_name": "tô vít 2UUL", "category": "tô vít", "properties": "", "quantity": 2}}, {{"product_name": "khò Quick 861DW", "category": "khò", "properties": "", "quantity": 1}}]}}}}
 
     - Câu hỏi: "cho tôi gặp anh Hoàng"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": true, "is_negative": false, "search_params": {{...}} }}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": true, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": []}} }}
     
     - Câu hỏi: "tôi muốn mua trực tiếp sản phẩm"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "wants_store_info": true, "search_params": {{...}} }}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "wants_store_info": true, "is_bank_transfer": false, "search_params": {{"products": []}} }}
     
     - Câu hỏi: "bot trả lời ngu thế"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": true, "search_params": {{...}} }}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": true, "is_bank_transfer": false, "search_params": {{"products": []}} }}
 
     - Câu hỏi: "tôi muốn thêm đơn", "tôi muốn mua thêm", "tôi muốn bổ sung đơn hàng"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": true, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{...}} }}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": true, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": []}} }}
 
     - Bối cảnh: Bot vừa hỏi "Dạ, mình muốn xem ảnh của loại tô vít 2UUL nào ạ?". Khách trả lời: "Tất cả"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "search_params": {{"product_name": "tô vít 2UUL", "category": "tô vít", "properties": ""}}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": true, "wants_specs": false, "wants_human_agent": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": [{{"product_name": "tô vít 2UUL", "category": "tô vít", "properties": ""}}]}}}}
 
     - Câu hỏi: "Máy hàn em mua hôm trước bị lỗi, cần bảo hành"
-      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": true, "is_negative": false, "search_params": {{"product_name": "máy hàn", "category": "máy hàn", "properties": "", "quantity": 1 }}}}
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": true, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": []}} }}
 
     - Câu hỏi: "Sản phẩm này bảo hành mấy tháng vậy?"
-      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": true, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": false, "is_negative": false, "search_params": {{"product_name": "sản phẩm này", "category": "sản phẩm", "properties": "", "quantity": 1 }}}}
+      JSON: {{"needs_search": true, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": true, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": false, "is_negative": false, "is_bank_transfer": false, "search_params": {{"products": [{{"product_name": "sản phẩm này", "category": "sản phẩm", "properties": "", "quantity": 1 }}]}}}}
 
+    - Câu hỏi: "Chị ơi, em mới chuyển khoản sáng nay cho chị rồi nhé"
+      JSON: {{"needs_search": false, "is_purchase_intent": false, "is_add_to_order_intent": false, "wants_images": false, "wants_specs": false, "wants_human_agent": false, "wants_store_info": false, "wants_warranty_service": false, "is_negative": false, "is_bank_transfer": true, "search_params": {{"products": []}} }}
     JSON của bạn:
     """
 
@@ -112,7 +123,8 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
         "wants_store_info": False,
         "wants_warranty_service": False,
         "is_negative": False, 
-        "search_params": { "product_name": user_query, "category": user_query, "properties": "", "quantity": 1 }
+        "is_bank_transfer": False,
+        "search_params": { "products": [{ "product_name": user_query, "category": user_query, "properties": "", "quantity": 1 }] }
     }
 
     response_text = None
@@ -148,7 +160,7 @@ def analyze_intent_and_extract_entities(user_query: str, history: list = None, m
         if json_match:
             cleaned_response = json_match.group(0)
             data = json.loads(cleaned_response)
-            if 'needs_search' in data and 'wants_images' in data and 'wants_specs' in data and 'search_params' in data:
+            if 'search_params' in data and 'products' in data['search_params']:
                 print(f"Kết quả phân tích: {data}")
                 print("-----------------------------------")
                 return data

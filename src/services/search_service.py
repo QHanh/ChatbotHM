@@ -1,9 +1,9 @@
 import os
 from elasticsearch import Elasticsearch
 from src.config.settings import PAGE_SIZE
+from typing import List, Dict
 
 ELASTIC_HOST = os.environ.get("ELASTIC_HOST", "http://localhost:9200")
-# Bạn có thể muốn đưa INDEX_NAME vào biến môi trường hoặc file config
 INDEX_NAME = os.environ.get("ELASTIC_INDEX", "products_news")
 
 try:
@@ -12,71 +12,62 @@ try:
         raise ConnectionError("Không thể kết nối đến Elasticsearch từ search_service.")
 except ConnectionError as e:
     print(f"Lỗi kết nối trong search_service: {e}")
-    # Trong môi trường thực tế, bạn có thể muốn xử lý lỗi này một cách mềm dẻo hơn
-    # thay vì thoát hoàn toàn, ví dụ: thử kết nối lại.
     es_client = None
 
-def search_products(
-    product_name: str,
-    category: str = None,
-    properties: str = None,
-    offset: int = 0,
-    strict_properties: bool = False,
-    strict_category: bool = False
-) -> list:
-    """
-    Tìm kiếm sản phẩm trong Elasticsearch.
-    Hỗ trợ tìm kiếm cân bằng, không quá rộng cũng không quá nghiêm ngặt.
-    """
-    if not es_client:
-        print("Lỗi: es_client chưa được khởi tạo trong search_service.")
+def search_products(product_name: str = None, category: str = None, properties: str = None, offset: int = 0, size: int = PAGE_SIZE, strict_properties: bool = False, strict_category: bool = False) -> List[Dict]:
+    if not product_name and not category and not properties:
         return []
-        
-    if not category:
-        category = product_name
 
-    must_clauses = []
-    should_clauses = []
-    filter_clauses = []
-
-    must_clauses.append({"match": {"product_name": {"query": product_name, "boost": 1.5}}})
-
-    should_clauses.append({"match": {"specifications": product_name}})
-    if category:
-        if strict_category:
-            must_clauses.append({"match": {"category": category}})
-        else:
-            should_clauses.append({"match": {"category": category}})
-
-    if properties:
-        if strict_properties:
-            must_clauses.append({"match": {"properties": { "query": properties, "operator": "and" }}})
-        else:
-            should_clauses.append({"match": {"properties": {"query": properties, "operator": "and", "boost": 1.0}}})
-
-    # if properties:
-    #     filter_clauses.append({
-    #         "match": {
-    #             "properties": properties
-    #         }
-    #     })
-
-    combined_query = {
+    body = {
         "query": {
             "bool": {
-                "must": must_clauses,
-                "should": should_clauses,
-                "filter": filter_clauses,
+                "must": [],
+                "should": [],
+                "filter": []
             }
-        }
+        },
+        "size": size,
+        "from": offset
     }
+
+    if product_name:
+        # Điều kiện BẮT BUỘC: sản phẩm phải chứa các từ trong tên tìm kiếm
+        body["query"]["bool"]["must"].append({
+            "match": {
+                "product_name": {
+                    "query": product_name
+                }
+            }
+        })
+        # Điều kiện KHÔNG BẮT BUỘC (để cộng điểm): ưu tiên cao cho khớp chính xác cụm từ
+        body["query"]["bool"]["should"].append({
+            "match_phrase": {
+                "product_name": {
+                    "query": product_name,
+                    "boost": 10.0
+                }
+            }
+        })
+
+    if category:
+        cat_field = "category.keyword" if strict_category else "category"
+        if strict_category:
+            body["query"]["bool"]["must"].append({"match": {cat_field: category}})
+        else:
+            # Cộng điểm nếu khớp category, giúp kéo các sản phẩm đúng danh mục lên trên
+            body["query"]["bool"]["should"].append({"match": {cat_field: {"query": category, "boost": 5.0}}})
+
+    if properties:
+        prop_query = {"match": {"properties": {"query": properties, "operator": "and"}}}
+        if strict_properties:
+            body["query"]["bool"]["must"].append(prop_query)
+        else:
+            body["query"]["bool"]["should"].append(prop_query)
 
     try:
         response = es_client.search(
             index=INDEX_NAME,
-            body=combined_query,
-            size=PAGE_SIZE,
-            from_=offset
+            body=body
         )
         hits = [hit['_source'] for hit in response['hits']['hits']]
         print(f"Tìm thấy {len(hits)} sản phẩm (offset={offset}, strict_cat={strict_category}, strict_prop={strict_properties}).")
@@ -108,7 +99,7 @@ def search_products_by_image(image_embedding: list, top_k: int = 1, min_similari
             min_score=min_similarity,
             size=top_k,
             _source_includes=[ 
-                "product_name", "category", "properties", "lifecare_price",
+                "product_name", "category", "properties", "specifications", "lifecare_price",
                 "inventory", "avatar_images", "link_product"
             ]
         )
